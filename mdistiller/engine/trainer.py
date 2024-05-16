@@ -28,6 +28,10 @@ class BaseTrainer(object):
         self.val_loader = val_loader
         self.optimizer = self.init_optimizer(cfg)
         self.best_acc = -1
+        if self.cfg.DISTILLER.EMA_SCHEDULER is not None:
+            self.ema_optimizer=self.init_optimizer(cfg)
+            self.ema_scheduler = self.init_scheduler(self.ema_optimizer, cfg)
+
 
         username = getpass.getuser()
         # init loggers
@@ -43,16 +47,39 @@ class BaseTrainer(object):
 
     def init_optimizer(self, cfg):
         if cfg.SOLVER.TYPE == "SGD":
-            optimizer = optim.SGD(
-                self.distiller.module.get_learnable_parameters(),
-                lr=cfg.SOLVER.LR,
-                momentum=cfg.SOLVER.MOMENTUM,
-                weight_decay=cfg.SOLVER.WEIGHT_DECAY,
-            )
+            # to make ema's optimizer
+            if self.cfg.DISTILLER.LEMMA:
+                optimizer = optim.SGD(
+                    [torch.tensor(1)],
+                    lr=cfg.DISTILLER.EMA[0],
+
+                )
+            else:
+                optimizer = optim.SGD(
+                    self.distiller.module.get_learnable_parameters(),
+                    lr=cfg.SOLVER.LR,
+                    momentum=cfg.SOLVER.MOMENTUM,
+                    weight_decay=cfg.SOLVER.WEIGHT_DECAY,
+                )
         else:
             raise NotImplementedError(cfg.SOLVER.TYPE)
         return optimizer
-
+    
+    
+    def init_scheduler(self, optimizer, cfg):
+        if cfg.DISTILLER.EMA_SCHEDULER == "CosineAnnealingLR":
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=cfg.DISTILLER.EMA[1])
+        elif cfg.DISTILLER.EMA_SCHEDULER == "CosineAnnealingWarmRestarts":
+            scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=25, T_mult=2, eta_min=cfg.DISTILLER.EMA[1])
+        elif cfg.DISTILLER.EMA_SCHEDULER == "MultiStepLR":
+            gamma = (cfg.DISTILLER.EMA[1]/cfg.DISTILLER.EMA[0]) **(1/len(cfg.DISTILLER.EMA_MILESTONES))
+            scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.DISTILLER.EMA_MILESTONES, gamma=gamma)
+        elif cfg.DISTILLER.EMA_SCHEDULER == "Linear":
+            scheduler = None
+        print(cfg.DISTILLER.EMA_SCHEDULER)
+        return scheduler
+            
+            
     def log(self, lr, epoch, log_dict):
         # tensorboard log
         for k, v in log_dict.items():
@@ -97,6 +124,13 @@ class BaseTrainer(object):
 
     def train_epoch(self, epoch):
         lr = adjust_learning_rate(epoch, self.cfg, self.optimizer)
+        if (epoch >= self.cfg.DISTILLER.EMA_FROM) and (self.ema_scheduler is not None):
+            ema_alpha = self.ema_optimizer.param_groups[0]['lr']
+            self.ema_scheduler.step()
+        else:
+            ema_alpha=1.0
+        print(ema_alpha)
+            
         train_meters = {
             "training_time": AverageMeter(),
             "data_time": AverageMeter(),
@@ -110,7 +144,7 @@ class BaseTrainer(object):
         # train loops
         self.distiller.train()
         for idx, data in enumerate(self.train_loader):
-            msg = self.train_iter(data, epoch, train_meters)
+            msg = self.train_iter(data, epoch, train_meters, ema_ratio=ema_alpha)
             pbar.set_description(log_msg(msg, "TRAIN"))
             pbar.update()
         pbar.close()
@@ -156,7 +190,7 @@ class BaseTrainer(object):
                 student_state, os.path.join(self.log_path, "student_best")
             )
 
-    def train_iter(self, data, epoch, train_meters):
+    def train_iter(self, data, epoch, train_meters, ema_ratio):
         self.optimizer.zero_grad()
         train_start_time = time.time()
         image, target, index = data
@@ -167,7 +201,7 @@ class BaseTrainer(object):
         index = index.cuda(non_blocking=True)
 
         # forward
-        preds, losses_dict = self.distiller(image=image, target=target, index=index, epoch=epoch)
+        preds, losses_dict = self.distiller(image=image, target=target, index=index, epoch=epoch, ema_ratio=ema_ratio)
 
         # backward
         loss = sum([l.mean() for l in losses_dict.values()])

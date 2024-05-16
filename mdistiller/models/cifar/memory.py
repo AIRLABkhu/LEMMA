@@ -4,7 +4,7 @@ import numpy as np
 
 import torch
 from torch import nn
-
+    
 
 class Memory(nn.Module):
     def __init__(self, memory_dir: str, cfg):
@@ -52,6 +52,7 @@ class Memory(nn.Module):
         self.__ema = cfg.DISTILLER.EMA
         self.__y_upper, self.__y_lower = self.__ema
         self.__gamma = cfg.DISTILLER.EMA_GAMMA
+        self.__ema_scheduler = cfg.DISTILLER.EMA_SCHEDULER
         
         self.dummy = nn.Parameter(torch.zeros(0))
         
@@ -70,20 +71,25 @@ class Memory(nn.Module):
         return logits, features
         
     @torch.no_grad()
-    def update(self, index, epoch, logits, feature):
+    def update(self, index, epoch, logits, feature, ema_ratio):
         if epoch < self.__x_lower:
             return
         if self.__ema is None:
             return 
+        if ema_ratio == 1.0:
+            print("not updating now")
+            return
         
         index = index.cpu()
         feats = feature['feats'] if 'feats' in feature else None
         preact_feats = feature['preact_feats'] if 'preact_feats' in feature else None
         pooled_feat = feature['pooled_feat'] if 'pooled_feat' in feature else None
-    
-        ema = (epoch - self.__x_lower) / (self.__x_upper - self.__x_lower)
-        ema = np.power(1 - np.power(ema, self.__gamma), 1 / self.__gamma)
-        ema = ema * (self.__y_upper - self.__y_lower) + self.__y_lower
+
+        if self.__ema_scheduler is "Linear":
+            ema = (epoch - self.__x_lower) / (self.__x_upper - self.__x_lower)
+            ema = np.power(1 - np.power(ema, self.__gamma), 1 / self.__gamma)
+            ema_ratio = ema_ratio * (self.__y_upper - self.__y_lower) + self.__y_lower
+        ema = ema_ratio
         _ema = 1 - ema  # .........| for student
         
         if (logits is not None) and self.use_logits:

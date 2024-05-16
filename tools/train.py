@@ -1,10 +1,11 @@
-import os
+import os, sys
 import argparse
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 
 cudnn.benchmark = True
+sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
 from mdistiller.models import cifar_model_dict, imagenet_model_dict
 from mdistiller.distillers import distiller_dict

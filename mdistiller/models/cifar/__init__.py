@@ -20,10 +20,14 @@ from .ShuffleNetv2 import ShuffleV2
 from .memory import Memory
 
 
-cifar100_model_prefix = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), 
-    "../../../download_ckpts/cifar_teachers/"
-)
+# cifar100_model_prefix = os.path.join(
+#     os.path.dirname(os.path.abspath(__file__)), 
+#     "../../../download_ckpts/cifar_teachers/"
+# )
+
+cifar100_model_prefix = "/home/gh/repos/lemma/download_ckpts/cifar_teachers/"
+
+
 cifar_model_dict = {
     # teachers
     "resnet56": (
