@@ -63,15 +63,18 @@ class BaseTrainer(object):
     
     def init_scheduler(self, optimizer, cfg):
         if cfg.DISTILLER.EMA_SCHEDULER == "CosineAnnealingLR":
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=cfg.DISTILLER.EMA[1])
-        elif cfg.DISTILLER.EMA_SCHEDULER == "CosineAnnealingWarmRestarts":
-            scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=25, T_mult=2, eta_min=cfg.DISTILLER.EMA[1])
+            T_max = int((cfg.SOLVER.EPOCHS - cfg.DISTILLER.EMA_FROM) / 2)
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=T_max, eta_min=cfg.DISTILLER.EMA[1])
         elif cfg.DISTILLER.EMA_SCHEDULER == "MultiStepLR":
             gamma = (cfg.DISTILLER.EMA[1]/cfg.DISTILLER.EMA[0]) **(1/len(cfg.DISTILLER.EMA_MILESTONES))
             scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=cfg.DISTILLER.EMA_MILESTONES, gamma=gamma)
         elif cfg.DISTILLER.EMA_SCHEDULER == "Linear":
-            scheduler = None
-        print(cfg.DISTILLER.EMA_SCHEDULER)
+            scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=cfg.DISTILLER.EMA[1], end_factor=cfg.DISTILLER.EMA[0])
+        elif cfg.DISTILLER.EMA_SCHEDULER == "ExponentialLR":
+            iter = cfg.SOLVER.EPOCHS - cfg.DISTILLER.EMA_FROM
+            gamma = (cfg.DISTILLER.EMA[1]/cfg.DISTILLER.EMA[0]) **(1/iter)
+            scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=gamma)
+        print(f'Using {cfg.DISTILLER.EMA_SCHEDULER} for EMA Scheduling')
         return scheduler
             
             
