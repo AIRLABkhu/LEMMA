@@ -75,9 +75,6 @@ class Memory(nn.Module):
         if epoch < self.__x_lower:
             return
         if self.__ema is None:
-            return 
-        if ema_ratio == 1.0:
-            print("not updating now")
             return
         
         index = index.cpu()
@@ -88,7 +85,7 @@ class Memory(nn.Module):
         if self.__ema_scheduler is "Linear":
             ema = (epoch - self.__x_lower) / (self.__x_upper - self.__x_lower)
             ema = np.power(1 - np.power(ema, self.__gamma), 1 / self.__gamma)
-            ema_ratio = ema_ratio * (self.__y_upper - self.__y_lower) + self.__y_lower
+            ema_ratio = ema * (self.__y_upper - self.__y_lower) + self.__y_lower
         ema = ema_ratio
         _ema = 1 - ema  # .........| for student
         

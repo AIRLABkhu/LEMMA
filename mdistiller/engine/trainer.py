@@ -29,7 +29,10 @@ class BaseTrainer(object):
         self.optimizer = self.init_optimizer(cfg)
         self.best_acc = -1
         if self.cfg.DISTILLER.EMA_SCHEDULER is not None:
-            self.ema_optimizer=self.init_optimizer(cfg)
+            self.ema_optimizer = optim.SGD(
+                    [torch.tensor(1)],
+                    lr=cfg.DISTILLER.EMA[0],
+                )
             self.ema_scheduler = self.init_scheduler(self.ema_optimizer, cfg)
 
 
@@ -47,20 +50,12 @@ class BaseTrainer(object):
 
     def init_optimizer(self, cfg):
         if cfg.SOLVER.TYPE == "SGD":
-            # to make ema's optimizer
-            if self.cfg.DISTILLER.LEMMA:
-                optimizer = optim.SGD(
-                    [torch.tensor(1)],
-                    lr=cfg.DISTILLER.EMA[0],
-
-                )
-            else:
-                optimizer = optim.SGD(
-                    self.distiller.module.get_learnable_parameters(),
-                    lr=cfg.SOLVER.LR,
-                    momentum=cfg.SOLVER.MOMENTUM,
-                    weight_decay=cfg.SOLVER.WEIGHT_DECAY,
-                )
+            optimizer = optim.SGD(
+                self.distiller.module.get_learnable_parameters(),
+                lr=cfg.SOLVER.LR,
+                momentum=cfg.SOLVER.MOMENTUM,
+                weight_decay=cfg.SOLVER.WEIGHT_DECAY,
+            )
         else:
             raise NotImplementedError(cfg.SOLVER.TYPE)
         return optimizer
