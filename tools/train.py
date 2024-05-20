@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import argparse
 import torch
 import torch.nn as nn
@@ -33,7 +34,12 @@ def main(cfg, resume, opts):
         except:
             print(log_msg("Failed to use WANDB", "INFO"))
             cfg.LOG.WANDB = False
-
+            
+    # init loggers
+    log_path  = Path(cfg.LOG.PREFIX).joinpath(experiment_name)
+    if not log_path.exists():
+        log_path.mkdir(parents=True)
+        
     # cfg & loggers
     show_cfg(cfg)
     # init dataloader & models
@@ -54,13 +60,13 @@ def main(cfg, resume, opts):
     else:
         print(log_msg("Loading teacher model", "INFO"))
         if cfg.DATASET.TYPE == "imagenet":
-            if cfg.DISTILLER.LEMMA:
+            if cfg.LEMMA.ENABLE:
                 raise NotImplementedError
             else:
                 model_teacher = imagenet_model_dict[cfg.DISTILLER.TEACHER](pretrained=True)
             model_student = imagenet_model_dict[cfg.DISTILLER.STUDENT](pretrained=False)
         else:
-            if cfg.DISTILLER.LEMMA:
+            if cfg.LEMMA.ENABLE:
                 memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_mem']
                 model_teacher = memory_type(memory_dir, cfg)
             else:
@@ -96,7 +102,7 @@ def main(cfg, resume, opts):
 
     # train
     trainer = trainer_dict[cfg.SOLVER.TRAINER](
-        experiment_name, distiller, train_loader, val_loader, cfg
+        log_path, distiller, train_loader, val_loader, cfg
     )
     trainer.train(resume=resume)
 

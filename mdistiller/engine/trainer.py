@@ -21,7 +21,7 @@ from .utils import (
 
 
 class BaseTrainer(object):
-    def __init__(self, experiment_name, distiller, train_loader, val_loader, cfg):
+    def __init__(self, log_path: Path, distiller, train_loader, val_loader, cfg):
         self.cfg = cfg
         self.distiller = distiller
         self.train_loader = train_loader
@@ -29,17 +29,11 @@ class BaseTrainer(object):
         self.optimizer = self.init_optimizer(cfg)
         self.best_acc = -1
 
-        username = getpass.getuser()
-        # init loggers
-        log_path  = Path(cfg.LOG.PREFIX).joinpath(experiment_name)
-        self.log_path = str(log_path)
-        if not log_path.exists():
-            log_path.mkdir(parents=True)
-        self.tf_writer = SummaryWriter(os.path.join(self.log_path, "train.events"))
+        self.log_path = log_path
+        self.tf_writer = SummaryWriter(str(self.log_path.joinpath("train.events")))
         
-        with open(log_path.joinpath('hparams.yaml'), 'wt') as file:
+        with open(self.log_path.joinpath('hparams.yaml'), 'wt') as file:
             file.write(cfg.dump())
-    
 
     def init_optimizer(self, cfg):
         if cfg.SOLVER.TYPE == "SGD":

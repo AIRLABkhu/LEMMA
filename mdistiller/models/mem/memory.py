@@ -47,11 +47,10 @@ class Memory(nn.Module):
         self.preact_feats = load(keys[2]) if self.use_preact_feats else None
         self.pooled_feat  = load(keys[3]) if self.use_pooled_feat  else None
         
-        self.__x_lower = cfg.DISTILLER.EMA_FROM
+        self.__x_lower = cfg.LEMMA.EMA_FROM
         self.__x_upper = cfg.SOLVER.EPOCHS
-        self.__ema = cfg.DISTILLER.EMA
+        self.__ema = cfg.LEMMA.EMA
         self.__y_upper, self.__y_lower = self.__ema
-        self.__gamma = cfg.DISTILLER.EMA_GAMMA
         
         self.dummy = nn.Parameter(torch.zeros(0))
         
@@ -82,7 +81,7 @@ class Memory(nn.Module):
         pooled_feat = feature['pooled_feat'] if 'pooled_feat' in feature else None
     
         ema = (epoch - self.__x_lower) / (self.__x_upper - self.__x_lower)
-        ema = np.power(1 - np.power(ema, self.__gamma), 1 / self.__gamma)
+        # ema = np.power(1 - np.power(ema, self.__gamma), 1 / self.__gamma)
         ema = ema * (self.__y_upper - self.__y_lower) + self.__y_lower
         _ema = 1 - ema  # .........| for student
         
