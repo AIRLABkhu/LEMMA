@@ -16,6 +16,8 @@ logs/tiny-transformer/pvt-ti_c100_KD_ours_model_epoch_0268.pyth
 # paths to teacher weights, data, output for CTKD
 /CTKD/save
 
+__pycache__
+
 # AIRLab
 *temp*
 temp*
