@@ -7,6 +7,7 @@ def show_cfg(cfg):
     dump_cfg.EXPERIMENT = cfg.EXPERIMENT
     dump_cfg.DATASET = cfg.DATASET
     dump_cfg.DISTILLER = cfg.DISTILLER
+    dump_cfg.LEMMA = cfg.LEMMA
     dump_cfg.SOLVER = cfg.SOLVER
     dump_cfg.LOG = cfg.LOG
     if cfg.DISTILLER.TYPE in cfg:
@@ -35,10 +36,13 @@ CFG.DISTILLER = CN()
 CFG.DISTILLER.TYPE = "NONE"  # Vanilla as default
 CFG.DISTILLER.TEACHER = "ResNet50"
 CFG.DISTILLER.STUDENT = "resnet32"
-CFG.DISTILLER.LEMMA = False
-CFG.DISTILLER.EMA = [0.999, 0.9]
-CFG.DISTILLER.EMA_FROM = 140
-CFG.DISTILLER.EMA_GAMMA = 1.0
+
+# LEMMA
+CFG.LEMMA = CN()
+CFG.LEMMA.ENABLE = False
+CFG.LEMMA.WARMUP = 140
+CFG.LEMMA.EMA_RANGE = [0.999, 0.9]
+CFG.LEMMA.STRATEGY = 'lin'  # 'const', 'lin', 'cos', 'negcos', 'optim' 
 
 # Solver
 CFG.SOLVER = CN()

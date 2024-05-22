@@ -54,13 +54,13 @@ def main(cfg, resume, opts):
     else:
         print(log_msg("Loading teacher model", "INFO"))
         if cfg.DATASET.TYPE == "imagenet":
-            if cfg.DISTILLER.LEMMA:
+            if cfg.LEMMA.ENABLE:
                 raise NotImplementedError
             else:
                 model_teacher = imagenet_model_dict[cfg.DISTILLER.TEACHER](pretrained=True)
             model_student = imagenet_model_dict[cfg.DISTILLER.STUDENT](pretrained=False)
         else:
-            if cfg.DISTILLER.LEMMA:
+            if cfg.LEMMA.ENABLE:
                 memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_mem']
                 model_teacher = memory_type(memory_dir, cfg)
             else:

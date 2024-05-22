@@ -10,12 +10,22 @@ class Distiller(nn.Module):
         self.teacher = teacher
         if cfg is not None:
             self.update_teacher = all([
-                cfg.DISTILLER.LEMMA, 
-                cfg.DISTILLER.EMA is not None, 
-                not (cfg.DISTILLER.EMA[0] == cfg.DISTILLER.EMA[1] == 1), 
+                cfg.LEMMA.ENABLE, 
+                cfg.LEMMA.EMA_RANGE is not None, 
+                not (cfg.LEMMA.EMA_RANGE[0] == cfg.LEMMA.EMA_RANGE[1] == 1), 
             ])
         else:
             self.update_teacher = False
+        
+        num_classes = {'cifar100': 100, 'imagenet': 1000}[cfg.DATASET.TYPE]
+        if cfg.LEMMA.STRATEGY == 'optim':
+            self.metric = nn.Sequential(
+                nn.Linear(num_classes * 2, 512), nn.ReLU(),
+                nn.Linear(512, 128), nn.ReLU(),
+                nn.Linear(128, 1), 
+            )
+        else:
+            self.metric = None
 
     def train(self, mode=True):
         # teacher as eval mode by default
@@ -29,7 +39,10 @@ class Distiller(nn.Module):
 
     def get_learnable_parameters(self):
         # if the method introduces extra parameters, re-impl this function
-        return [v for k, v in self.student.named_parameters()]
+        return [
+            *[v for k, v in self.student.named_parameters()],
+            *(self.metric.parameters() if self.metric else []),
+        ]
 
     def get_extra_parameters(self):
         # calculate the extra parameters introduced by the distiller

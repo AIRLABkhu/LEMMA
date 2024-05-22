@@ -6,7 +6,8 @@ DISTILLER:
   TYPE: "MLKD"
   TEACHER: "resnet56"
   STUDENT: "resnet20"
-  LEMMA: True
+LEMMA:
+  ENABLE: True
 SOLVER:
   BATCH_SIZE: 64
   EPOCHS: 480
@@ -17,3 +18,5 @@ SOLVER:
   MOMENTUM: 0.9
   TYPE: "SGD"
   TRAINER: "ours"
+  
+

@@ -6,7 +6,8 @@ DISTILLER:
   TYPE: "DKD"
   TEACHER: "resnet32x4"
   STUDENT: "ShuffleV1"
-  LEMMA: True
+LEMMA:
+  ENABLE: True
 SOLVER:
   BATCH_SIZE: 64
   EPOCHS: 240
@@ -16,4 +17,5 @@ SOLVER:
   WEIGHT_DECAY: 0.0005
   MOMENTUM: 0.9
   TYPE: "SGD"
+  
 

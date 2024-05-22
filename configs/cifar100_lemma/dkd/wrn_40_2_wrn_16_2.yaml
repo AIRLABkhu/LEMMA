@@ -6,7 +6,8 @@ DISTILLER:
   TYPE: "DKD"
   TEACHER: "wrn_40_2"
   STUDENT: "wrn_16_2"
-  LEMMA: True
+LEMMA:
+  ENABLE: True
 SOLVER:
   BATCH_SIZE: 64
   EPOCHS: 240
@@ -18,3 +19,5 @@ SOLVER:
   TYPE: "SGD"
 DKD:
   BETA: 6.0
+  
+

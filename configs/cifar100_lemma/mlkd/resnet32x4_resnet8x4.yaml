@@ -6,7 +6,8 @@ DISTILLER:
   TYPE: "MLKD"
   TEACHER: "resnet32x4"
   STUDENT: "resnet8x4"
-  LEMMA: True
+LEMMA:
+  ENABLE: True
 SOLVER:
   BATCH_SIZE: 64
   EPOCHS: 480
@@ -17,45 +18,5 @@ SOLVER:
   MOMENTUM: 0.9
   TYPE: "SGD"
   TRAINER: "ours"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  
 

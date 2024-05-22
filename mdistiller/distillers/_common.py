@@ -10,6 +10,26 @@ def normalize(logit):
 def denormalize(logits, std, mean):
     return (logits * std) + mean
 
+def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
+    match cfg.LEMMA.STRATEGY:
+        case 'const':
+            return cfg.LEMMA.EMA_RANGE[0]
+        case 'lin':
+            ema = (epoch - cfg.LEMMA.WARMUP) / (cfg.SOLVER.EPOCHS - cfg.LEMMA.WARMUP)
+            return ema * (cfg.LEMMA.EMA_RANGE[0] - cfg.LEMMA.EMA_RANGE[1]) + cfg.LEMMA.EMA_RANGE[1]
+        case 'cos':
+            sim = nn.functional.cosine_similarity(logits_student, logits_teacher).unsqueeze(-1)
+            _sim = 1 - sim
+            return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
+        case 'negcos':
+            sim = 1 - nn.functional.cosine_similarity(logits_student, logits_teacher).unsqueeze(-1)
+            _sim = 1 - sim
+            return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
+        case 'optim':
+            raise NotImplementedError
+        case _:
+            raise ValueError
+
 
 class ConvReg(nn.Module):
     """Convolutional regression"""

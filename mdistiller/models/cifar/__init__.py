@@ -17,7 +17,7 @@ from .mobilenetv2 import mobile_half
 from .ShuffleNetv1 import ShuffleV1
 from .ShuffleNetv2 import ShuffleV2
 
-from .memory import Memory
+from ..memory import Memory
 
 
 cifar100_model_prefix = os.path.join(

@@ -6,7 +6,8 @@ DISTILLER:
   TYPE: "DKD"
   TEACHER: "resnet56"
   STUDENT: "resnet20"
-  LEMMA: True
+LEMMA:
+  ENABLE: True
 SOLVER:
   BATCH_SIZE: 64
   EPOCHS: 240
@@ -18,3 +19,5 @@ SOLVER:
   TYPE: "SGD"
 DKD:
   BETA: 2.0
+  
+

@@ -6,7 +6,8 @@ DISTILLER:
   TYPE: "FITNET"
   TEACHER: "resnet32x4"
   STUDENT: "resnet8x4"
-  LEMMA: True
+LEMMA:
+  ENABLE: True
 SOLVER:
   BATCH_SIZE: 64
   EPOCHS: 240
@@ -16,3 +17,5 @@ SOLVER:
   WEIGHT_DECAY: 0.0005
   MOMENTUM: 0.9
   TYPE: "SGD"
+  
+
