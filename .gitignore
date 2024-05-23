@@ -22,3 +22,5 @@ temp*
 recipe
 runner
 tools/monitor.*
+/_temp
+/results
