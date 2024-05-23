@@ -27,6 +27,7 @@ class KD(Distiller):
         self.kd_loss_weight = cfg.KD.LOSS.KD_WEIGHT
         self.logit_stand = cfg.EXPERIMENT.LOGIT_STAND 
         self.ema_range = cfg.LEMMA.EMA_RANGE
+        self.reset_epochs = set(cfg.LEMMA.RESET)
 
     def forward_train(self, image, target, index, epoch, **kwargs):
         logits_student, _ = self.student(image)
@@ -40,6 +41,8 @@ class KD(Distiller):
             
         with torch.no_grad():
             if self.update_teacher:
+                if epoch in self.reset_epochs:
+                    self.teacher.reset()
                 ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, None)
                 logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher) if self.logit_stand else logits_student
                 self.teacher.update(index, epoch, logits_student_may_shift, {}, ema_alpha=ema_alpha)

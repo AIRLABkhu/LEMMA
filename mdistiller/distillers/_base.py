@@ -17,8 +17,8 @@ class Distiller(nn.Module):
         else:
             self.update_teacher = False
         
-        num_classes = {'cifar100': 100, 'imagenet': 1000}[cfg.DATASET.TYPE]
         if cfg.LEMMA.STRATEGY == 'optim':
+            num_classes = {'cifar100': 100, 'imagenet': 1000}[cfg.DATASET.TYPE]
             self.metric = nn.Sequential(
                 nn.Linear(num_classes * 2, 512), nn.ReLU(),
                 nn.Linear(512, 128), nn.ReLU(),

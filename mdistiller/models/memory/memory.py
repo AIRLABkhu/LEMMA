@@ -7,15 +7,10 @@ from torch import nn
 
 
 class Memory(nn.Module):
+    KEYS = ['logits', 'feats', 'preact_feats', 'pooled_feat']
+    
     def __init__(self, memory_dir: str, cfg):
         super(Memory, self).__init__()
-        
-        def load(target):
-            path = os.path.join(memory_dir, f'{target}.pth')
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"Memory not found: '{path}'.")
-            
-            return torch.load(path, map_location='cpu')
         
         mask = {
             "NONE"      : 0b0000, 
@@ -35,28 +30,39 @@ class Memory(nn.Module):
             "REVIEWKD"  : 0b0101, 
             "DKD"       : 0b1000, 
         }[cfg.DISTILLER.TYPE]
-        keys = ['logits', 'feats', 'preact_feats', 'pooled_feat']
         
+        self.memory_dir = memory_dir
         self.use_logits       = bool(mask & 0b1000)
         self.use_feats        = bool(mask & 0b0100)
         self.use_preact_feats = bool(mask & 0b0010)
         self.use_pooled_feat  = bool(mask & 0b0001)
 
-        self.logits       = load(keys[0]) if self.use_logits       else None
-        self.feats        = load(keys[1]) if self.use_feats        else None
-        self.preact_feats = load(keys[2]) if self.use_preact_feats else None
-        self.pooled_feat  = load(keys[3]) if self.use_pooled_feat  else None
+        self.logits       = self._load(Memory.KEYS[0]) if self.use_logits       else None
+        self.feats        = self._load(Memory.KEYS[1]) if self.use_feats        else None
+        self.preact_feats = self._load(Memory.KEYS[2]) if self.use_preact_feats else None
+        self.pooled_feat  = self._load(Memory.KEYS[3]) if self.use_pooled_feat  else None
         
         self.__x_lower = cfg.LEMMA.WARMUP
-        self.__x_upper = cfg.SOLVER.EPOCHS
         self.__ema = cfg.LEMMA.EMA_RANGE
-        self.__y_upper, self.__y_lower = self.__ema
         
         self.dummy = nn.Parameter(torch.zeros(0))
         
     @property
     def device(self):
         return self.dummy.device
+        
+    def _load(self, target):
+        path = os.path.join(self.memory_dir, f'{target}.pth')
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Memory not found: '{path}'.")
+        
+        return torch.load(path, map_location='cpu')
+    
+    def reset(self):
+        self.logits       = self._load(Memory.KEYS[0]) if self.use_logits       else None
+        self.feats        = self._load(Memory.KEYS[1]) if self.use_feats        else None
+        self.preact_feats = self._load(Memory.KEYS[2]) if self.use_preact_feats else None
+        self.pooled_feat  = self._load(Memory.KEYS[3]) if self.use_pooled_feat  else None
     
     def forward(self, x, index, **kwargs):
         index = index.cpu()

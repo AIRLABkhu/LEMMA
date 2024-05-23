@@ -27,6 +27,11 @@ def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
             return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case 'optim':
             raise NotImplementedError
+        case 'rand':
+            batch_size = logits_student.size(0)
+            sim = torch.rand(batch_size, 1, device=logits_student.device)
+            _sim = 1 - sim
+            return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case _:
             raise ValueError
 

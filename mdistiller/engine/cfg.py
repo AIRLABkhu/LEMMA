@@ -42,7 +42,8 @@ CFG.LEMMA = CN()
 CFG.LEMMA.ENABLE = False
 CFG.LEMMA.WARMUP = 140
 CFG.LEMMA.EMA_RANGE = [0.999, 0.9]
-CFG.LEMMA.STRATEGY = 'lin'  # 'const', 'lin', 'cos', 'negcos', 'optim' 
+CFG.LEMMA.STRATEGY = 'lin'  # 'const', 'lin', 'cos', 'negcos', 'optim', 'rand'
+CFG.LEMMA.RESET = []
 
 # Solver
 CFG.SOLVER = CN()
