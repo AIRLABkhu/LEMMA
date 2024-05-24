@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.backends.cudnn as cudnn
 
 cudnn.benchmark = True
-
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
@@ -112,6 +111,7 @@ if __name__ == "__main__":
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--name", type=str, default=None)
     parser.add_argument("--logit-stand", action="store_true")
+    parser.add_argument("--export-cossim", type=str, default=None)
     parser.add_argument("--base-temp", type=float, default=2)
     parser.add_argument("--kd-weight", type=float, default=9)
     parser.add_argument("opts", default=None, nargs=argparse.REMAINDER)
@@ -135,5 +135,10 @@ if __name__ == "__main__":
         elif cfg.DISTILLER.TYPE == 'MLKD':
             cfg.KD.LOSS.KD_WEIGHT = args.kd_weight
             cfg.KD.TEMPERATURE = args.base_temp
+            
+    if args.export_cossim and cfg.LEMMA.ENABLE:
+        cfg.LEMMA.EXPORT_COSSIM = f'temp/{args.export_cossim}'
+        os.makedirs(cfg.LEMMA.EXPORT_COSSIM, exist_ok=True)
+    
     cfg.freeze()
     main(cfg, args.resume, args.opts)

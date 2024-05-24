@@ -26,7 +26,6 @@ def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
             _sim = 1 - sim
             return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case 'attn':
-
             raise NotImplementedError # TODO:
         case 'rand':
             batch_size = logits_student.size(0)
@@ -68,32 +67,35 @@ class ConvReg(nn.Module):
 class SimpleAttentionBlock(nn.Module):
     def __init__(self, cfg, num_class):
         super(SimpleAttentionBlock, self).__init__()
-        self.attn_dim = cfg.ATTN.DIM
+        self.attn_dim = cfg.LEMMA.ATTN.DIM
         self.num_class = num_class
 
         self.q = nn.Linear(self.num_class , self.attn_dim, bias=False)
         self.k = nn.Linear(self.num_class , self.attn_dim, bias=False)
         if cfg.LEMMA.ATTN.V_LAYER:
-            self.v_s = nn.Linear(self.num_class , self.attn_dim, bias=False)
-            self.v_t = nn.Linear(self.num_class , self.attn_dim, bias=False)
+            self.v_s = nn.Linear(self.num_class , self.num_class, bias=False)
+            self.v_t = nn.Linear(self.num_class , self.num_class, bias=False)
+        else:
+            self.v_s = nn.Identity()
+            self.v_t = nn.Identity()
+        self.fc_out = nn.Linear(self.num_class , self.num_class)
 
 
     def forward(self, teacher, student, get_attention=False):
         q = self.q(teacher)
         k = self.k(student)
-        if self.v_s:
-            v_t = self.v_t(teacher)
-            v_s = self.v_s(student)
+        v_t = self.v_t(teacher)
+        v_s = self.v_s(student)
         
         qk = q @ k.transpose(0, 1)
-        attn = torch.softmax(qk / (self.embed_size ** (1 / 2)), dim=-1)
+        attn = torch.softmax(qk / (self.attn_dim ** (1 / 2)), dim=-1)
         attn_ = 1 - attn
 
         attn_vs = attn_ @ v_s
         attn_vt = attn @ v_t
 
         out = attn_vs + attn_vt
-        # out = self.fc_out(out)
+        out = self.fc_out(out)
 
         if get_attention:
             return out, attn
