@@ -51,10 +51,9 @@ class KD(Distiller):
                 self.teacher.update(index, epoch, logits_student_may_shift, {}, ema_alpha=ema_alpha)
 
         # losses
+        loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
         if self.cfg.LEMMA.STRATEGY == 'attn':
-            loss_ce = self.ce_loss_weight * F.cross_entropy(attn_logit, target)
-        else:
-            loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
+            loss_ce += self.ce_loss_weight * F.cross_entropy(attn_logit, target)
         loss_kd = self.kd_loss_weight * kd_loss(
             logits_student, logits_teacher, self.temperature, self.logit_stand
         )
