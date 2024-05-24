@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ._common import SimpleAttentionBlock
+
 
 class Distiller(nn.Module):
     def __init__(self, student, teacher, cfg=None):
@@ -17,15 +19,11 @@ class Distiller(nn.Module):
         else:
             self.update_teacher = False
         
-        if cfg.LEMMA.STRATEGY == 'optim':
+        if cfg.LEMMA.STRATEGY == 'attn':  # TODO: 
             num_classes = {'cifar100': 100, 'imagenet': 1000}[cfg.DATASET.TYPE]
-            self.metric = nn.Sequential(
-                nn.Linear(num_classes * 2, 512), nn.ReLU(),
-                nn.Linear(512, 128), nn.ReLU(),
-                nn.Linear(128, 1), 
-            )
+            self.attn = SimpleAttentionBlock(cfg, num_classes)
         else:
-            self.metric = None
+            self.attn = None
 
     def train(self, mode=True):
         # teacher as eval mode by default
@@ -41,7 +39,7 @@ class Distiller(nn.Module):
         # if the method introduces extra parameters, re-impl this function
         return [
             *[v for k, v in self.student.named_parameters()],
-            *(self.metric.parameters() if self.metric else []),
+            *(self.attn.parameters() if self.attn else []),
         ]
 
     def get_extra_parameters(self):
