@@ -26,14 +26,13 @@ def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
             _sim = 1 - sim
             return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case 'attn':
-            raise NotImplementedError # TODO:
+            attn_logit, ema = net(logits_teacher, logits_student, get_attention=True)
+            return attn_logit, ema
         case 'rand':
             batch_size = logits_student.size(0)
             sim = torch.rand(batch_size, 1, device=logits_student.device)
             _sim = 1 - sim
             return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
-        # case 'attn_ema':
-            
         case _:
             raise ValueError
 
@@ -69,17 +68,18 @@ class SimpleAttentionBlock(nn.Module):
         super(SimpleAttentionBlock, self).__init__()
         self.attn_dim = cfg.LEMMA.ATTN.DIM
         self.num_class = num_class
-
-        self.q = nn.Linear(self.num_class , self.attn_dim, bias=False)
-        self.k = nn.Linear(self.num_class , self.attn_dim, bias=False)
         if cfg.LEMMA.ATTN.V_LAYER:
-            self.v_s = nn.Linear(self.num_class , self.num_class, bias=False)
-            self.v_t = nn.Linear(self.num_class , self.num_class, bias=False)
+            self.q = nn.Linear(self.num_class , self.attn_dim, bias=False)
+            self.k = nn.Linear(self.num_class , self.attn_dim, bias=False)
+            self.v_s = nn.Linear(self.num_class , self.attn_dim, bias=False)
+            self.v_t = nn.Linear(self.num_class , self.attn_dim, bias=False)
+            self.fc_out = nn.Linear(self.attn_dim , self.num_class)
         else:
+            self.q = nn.Linear(self.num_class , self.num_class, bias=False)
+            self.k = nn.Linear(self.num_class , self.num_class, bias=False)
             self.v_s = nn.Identity()
             self.v_t = nn.Identity()
-        self.fc_out = nn.Linear(self.num_class , self.num_class)
-
+            self.fc_out = nn.Linear(self.num_class , self.num_class)
 
     def forward(self, teacher, student, get_attention=False):
         q = self.q(teacher)
@@ -87,7 +87,7 @@ class SimpleAttentionBlock(nn.Module):
         v_t = self.v_t(teacher)
         v_s = self.v_s(student)
         
-        qk = q @ k.transpose(0, 1)
+        qk = q.transpose(0, 1) @ k
         attn = torch.softmax(qk / (self.attn_dim ** (1 / 2)), dim=-1)
         attn_ = 1 - attn
 

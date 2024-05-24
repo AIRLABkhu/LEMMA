@@ -47,13 +47,14 @@ class KD(Distiller):
                     attn_logit, ema_alpha = self.attn(logits_teacher, logits_student, get_attention=True)
                 else:
                     ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, None)
+                    attn_logit = None
                 logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher) if self.logit_stand else logits_student
                 self.teacher.update(index, epoch, logits_student_may_shift, {}, ema_alpha=ema_alpha)
 
         # losses
         loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
-        if self.cfg.LEMMA.STRATEGY == 'attn':
-            loss_ce += self.ce_loss_weight * F.cross_entropy(attn_logit, target)
+        if attn_logit is not None:
+            loss_ce = loss_ce + self.ce_loss_weight * F.cross_entropy(attn_logit, target)
         loss_kd = self.kd_loss_weight * kd_loss(
             logits_student, logits_teacher, self.temperature, self.logit_stand
         )
