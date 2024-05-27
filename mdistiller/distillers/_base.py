@@ -19,7 +19,7 @@ class Distiller(nn.Module):
         else:
             self.update_teacher = False
         
-        if cfg.LEMMA.STRATEGY == 'attn':  # TODO: 
+        if cfg.LEMMA.STRATEGY == 'attn':  
             num_classes = {'cifar100': 100, 'imagenet': 1000}[cfg.DATASET.TYPE]
             self.attn = SimpleAttentionBlock(cfg, num_classes)
         else:

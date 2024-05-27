@@ -44,6 +44,7 @@ class Memory(nn.Module):
         
         self.__x_lower = cfg.LEMMA.WARMUP
         self.__ema = cfg.LEMMA.EMA_RANGE
+        self.ema_step = cfg.LEMMA.EMA_STEP
         
         self.dummy = nn.Parameter(torch.zeros(0))
         
@@ -77,6 +78,8 @@ class Memory(nn.Module):
     @torch.no_grad()
     def update(self, index, epoch, logits, feature, ema_alpha):
         if epoch < self.__x_lower:
+            return
+        if (epoch - self.__x_lower + 1) % self.ema_step != 0:
             return
         if self.__ema is None:
             return 

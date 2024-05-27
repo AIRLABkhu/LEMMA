@@ -75,11 +75,14 @@ class SimpleAttentionBlock(nn.Module):
             self.v_t = nn.Linear(self.num_class , self.attn_dim, bias=False)
             self.fc_out = nn.Linear(self.attn_dim , self.num_class)
         else:
-            self.q = nn.Linear(self.num_class , self.num_class, bias=False)
-            self.k = nn.Linear(self.num_class , self.num_class, bias=False)
+            self.q = nn.Linear(self.num_class , self.attn_dim, bias=False)
+            self.k = nn.Linear(self.num_class , self.attn_dim, bias=False)
             self.v_s = nn.Identity()
             self.v_t = nn.Identity()
-            self.fc_out = nn.Linear(self.num_class , self.num_class)
+            if cfg.LEMMA.ATTN.FC_LAYER:
+                self.fc_out = nn.Linear(self.num_class , self.num_class)
+            else:
+                self.fc_out = nn.Identity()
 
     def forward(self, teacher, student, get_attention=False):
         q = self.q(teacher)
