@@ -92,7 +92,10 @@ class Memory(nn.Module):
         _ema = 1 - ema  # .........| for student
         
         if (logits is not None) and self.use_logits:
-            self.logits[index] = (logits.cpu() * _ema) + (self.logits[index] * ema)
+            if isinstance(ema, torch.Tensor):
+                self.logits[index] = (_ema.unsqueeze(-1) * logits.cpu()) + (ema.unsqueeze(-1) * self.logits[index])
+            else:
+                self.logits[index] = (logits.cpu() * _ema) + (self.logits[index] * ema)
         if (feats is not None) and self.use_feats:
             for i in range(len(feats)):
                 self.feats[i][index] = (feats[i].cpu() * _ema) + (self.feats[i][index] * ema)

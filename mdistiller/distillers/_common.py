@@ -87,18 +87,20 @@ class SimpleAttentionBlock(nn.Module):
         v_t = self.v_t(teacher)
         v_s = self.v_s(student)
         
-        qk = q.transpose(0, 1) @ k
-        attn = torch.softmax(qk / (self.attn_dim ** (1 / 2)), dim=-1)
-        attn_ = 1 - attn
+        qk = q @ k.transpose(0, 1)
+        attn = qk / (self.attn_dim ** (1 / 2))
+        diag_attn = attn.diag()
+        attn_score = torch.sigmoid(diag_attn)
+        attn_score_ = 1 - attn_score
 
-        attn_vs = attn_ @ v_s
-        attn_vt = attn @ v_t
+        attn_vs = attn_score_.unsqueeze(-1) * v_s
+        attn_vt = attn_score.unsqueeze(-1) * v_t
 
         out = attn_vs + attn_vt
         out = self.fc_out(out)
 
         if get_attention:
-            return out, attn
+            return out, attn_score
         else:
             return out
 

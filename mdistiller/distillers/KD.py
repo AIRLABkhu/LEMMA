@@ -44,7 +44,7 @@ class KD(Distiller):
                 if epoch in self.reset_epochs:
                     self.teacher.reset()
                 if self.cfg.LEMMA.STRATEGY == 'attn':
-                    attn_logit, ema_alpha = self.attn(logits_teacher, logits_student, get_attention=True)
+                    attn_logit, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
                 else:
                     ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, None)
                     attn_logit = None
