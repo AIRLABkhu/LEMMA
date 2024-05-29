@@ -47,9 +47,10 @@ CFG.LEMMA.STRATEGY = 'lin'  # 'const', 'lin', 'cos', 'negcos', 'attn', 'rand'
 CFG.LEMMA.RESET = []
 CFG.LEMMA.ATTN = CN()
 CFG.LEMMA.ATTN.DIM = 256
-CFG.LEMMA.ATTN.USE_RANGE = False
 CFG.LEMMA.ATTN.V_LAYER = True
 CFG.LEMMA.ATTN.FC_LAYER = True
+CFG.LEMMA.ATTN.COS = False
+CFG.LEMMA.ATTN.INV = False
 
 # Solver
 CFG.SOLVER = CN()

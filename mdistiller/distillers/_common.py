@@ -13,18 +13,18 @@ def denormalize(logits, std, mean):
 def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
     match cfg.LEMMA.STRATEGY:
         case 'const':
-            return cfg.LEMMA.EMA_RANGE[0]
+            return None, cfg.LEMMA.EMA_RANGE[0]
         case 'lin':
             ema = (epoch - cfg.LEMMA.WARMUP) / (cfg.SOLVER.EPOCHS - cfg.LEMMA.WARMUP)
             return ema * (cfg.LEMMA.EMA_RANGE[0] - cfg.LEMMA.EMA_RANGE[1]) + cfg.LEMMA.EMA_RANGE[1]
         case 'cos':
             sim = nn.functional.cosine_similarity(logits_student, logits_teacher).unsqueeze(-1)
             _sim = 1 - sim
-            return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
+            return None, (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case 'negcos':
             sim = 1 - nn.functional.cosine_similarity(logits_student, logits_teacher).unsqueeze(-1)
             _sim = 1 - sim
-            return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
+            return None, (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case 'attn':
             attn_logit, ema = net(logits_teacher, logits_student, get_attention=True)
             return attn_logit, ema
@@ -32,7 +32,7 @@ def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
             batch_size = logits_student.size(0)
             sim = torch.rand(batch_size, 1, device=logits_student.device)
             _sim = 1 - sim
-            return (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
+            return None, (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case _:
             raise ValueError
 
@@ -67,7 +67,10 @@ class SimpleAttentionBlock(nn.Module):
     def __init__(self, cfg, num_class):
         super(SimpleAttentionBlock, self).__init__()
         self.attn_dim = cfg.LEMMA.ATTN.DIM
+        self.use_cos = cfg.LEMMA.ATTN.COS
+        self.invert_attn = cfg.LEMMA.ATTN.INV
         self.num_class = num_class
+
         if cfg.LEMMA.ATTN.V_LAYER:
             self.q = nn.Linear(self.num_class , self.attn_dim, bias=False)
             self.k = nn.Linear(self.num_class , self.attn_dim, bias=False)
@@ -90,11 +93,17 @@ class SimpleAttentionBlock(nn.Module):
         v_t = self.v_t(teacher)
         v_s = self.v_s(student)
         
-        qk = q @ k.transpose(0, 1)
-        attn = qk / (self.attn_dim ** (1 / 2))
-        diag_attn = attn.diag()
-        attn_score = torch.sigmoid(diag_attn)
+        qk = (q * k).sum(dim=1)
+        if self.use_cos:
+            attn = qk / (torch.norm(q, dim=1) * torch.norm(k, dim=1))
+            attn_score = (attn + 1) / 2.0
+        else:
+            attn = qk / (self.attn_dim ** (1 / 2))
+            attn_score = torch.sigmoid(attn)
         attn_score_ = 1 - attn_score
+
+        if self.invert_attn:
+            attn_score_, attn_score = attn_score, attn_score_
 
         attn_vs = attn_score_.unsqueeze(-1) * v_s
         attn_vt = attn_score.unsqueeze(-1) * v_t
@@ -106,6 +115,7 @@ class SimpleAttentionBlock(nn.Module):
             return out, attn_score
         else:
             return out
+
 
 def get_feat_shapes(student, teacher, input_size):
     data = torch.randn(1, 3, *input_size)

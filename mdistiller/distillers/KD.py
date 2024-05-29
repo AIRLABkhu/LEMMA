@@ -39,15 +39,11 @@ class KD(Distiller):
             with torch.no_grad():
                 logits_teacher, std_teacher, mean_teacher = normalize(logits_teacher)
             
-        with torch.no_grad():
-            if self.update_teacher:
+        if self.update_teacher:
+            attn_logit, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
+            with torch.no_grad():
                 if epoch in self.reset_epochs:
                     self.teacher.reset()
-                if self.cfg.LEMMA.STRATEGY == 'attn':
-                    attn_logit, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
-                else:
-                    ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, None)
-                    attn_logit = None
                 logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher) if self.logit_stand else logits_student
                 self.teacher.update(index, epoch, logits_student_may_shift, {}, ema_alpha=ema_alpha)
 
