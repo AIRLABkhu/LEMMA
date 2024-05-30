@@ -25,6 +25,7 @@ class KD(Distiller):
         self.temperature = cfg.KD.TEMPERATURE
         self.ce_loss_weight = cfg.KD.LOSS.CE_WEIGHT
         self.kd_loss_weight = cfg.KD.LOSS.KD_WEIGHT
+        self.attn_loss_weight = cfg.LEMMA.ATTN.LOSS_WEIGHT 
         self.logit_stand = cfg.EXPERIMENT.LOGIT_STAND 
         self.ema_range = cfg.LEMMA.EMA_RANGE
         self.reset_epochs = set(cfg.LEMMA.RESET)
@@ -40,7 +41,7 @@ class KD(Distiller):
                 logits_teacher, std_teacher, mean_teacher = normalize(logits_teacher)
             
         if self.update_teacher:
-            attn_logit, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
+            logits_attn, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
             with torch.no_grad():
                 if epoch in self.reset_epochs:
                     self.teacher.reset()
@@ -49,13 +50,16 @@ class KD(Distiller):
 
         # losses
         loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
-        if attn_logit is not None:
-            loss_ce = loss_ce + self.ce_loss_weight * F.cross_entropy(attn_logit, target)
+        if logits_attn is not None:
+            loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
+        else:
+            loss_attn = 0
         loss_kd = self.kd_loss_weight * kd_loss(
             logits_student, logits_teacher, self.temperature, self.logit_stand
         )
         losses_dict = {
             "loss_ce": loss_ce,
             "loss_kd": loss_kd,
+            "loss_attn": loss_attn,
         }
         return logits_student, losses_dict
