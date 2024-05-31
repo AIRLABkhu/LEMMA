@@ -26,7 +26,10 @@ def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
             _sim = 1 - sim
             return None, (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case 'attn':
-            attn_logit, ema = net(logits_teacher, logits_student, get_attention=True)
+            if cfg.LEMMA.ISOLATE:
+                attn_logit, ema = net(logits_teacher, logits_student.detach(), get_attention=True)
+            else:
+                attn_logit, ema = net(logits_teacher, logits_student, get_attention=True)
             return attn_logit, ema
         case 'rand':
             batch_size = logits_student.size(0)

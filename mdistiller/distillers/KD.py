@@ -29,6 +29,8 @@ class KD(Distiller):
         self.logit_stand = cfg.EXPERIMENT.LOGIT_STAND 
         self.ema_range = cfg.LEMMA.EMA_RANGE
         self.reset_epochs = set(cfg.LEMMA.RESET)
+        self.save_logit = cfg.LEMMA.SAVE_LOGIT
+        self.ema_from  = cfg.LEMMA.WARMUP
 
     def forward_train(self, image, target, index, epoch, **kwargs):
         logits_student, _ = self.student(image)

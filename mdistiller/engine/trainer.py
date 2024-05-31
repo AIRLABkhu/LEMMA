@@ -115,6 +115,10 @@ class BaseTrainer(object):
             pbar.update()
         pbar.close()
 
+
+        if self.cfg.LEMMA.SAVE_LOGIT and (epoch >= self.cfg.LEMMA.WARMUP) and (((epoch - self.cfg.LEMMA.WARMUP) % self.cfg.LEMMA.SAVE_LOGIT) == 0):
+            self.distiller.module.teacher.export(path=f'__temp/{self.cfg.EXPERIMENT.NAME.replace("/", "-")}', suffix=f'{epoch:03d}')
+
         # validate
         test_acc, test_acc_top5, test_loss = validate(self.val_loader, self.distiller)
 

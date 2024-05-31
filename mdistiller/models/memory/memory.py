@@ -107,6 +107,20 @@ class Memory(nn.Module):
                 self.preact_feats[i][index] = (preact_feats[i].cpu() * _ema) + (self.preact_feats[i][index] * ema)
         if (pooled_feat is not None) and self.use_pooled_feat:
             self.pooled_feat[index] = (pooled_feat.cpu() * _ema) + (self.pooled_feat[index] * ema)
+
+    @torch.no_grad()
+    def export(self, path: str, suffix=None):
+        from pathlib import Path
+        path: Path = Path(path).joinpath(suffix)
+        path.mkdir(parents=True, exist_ok=True)
+        if self.logits is not None:
+            np.save(str(path.joinpath('logits.npy')), self.logits.numpy())
+        if self.feats is not None:
+            torch.save(self.feats, str(path.joinpath('feats.pt')))
+        if self.preact_feats is not None:
+            torch.save(self.preact_feats, str(path.joinpath('preact_feats.pt')))
+        if self.pooled_feat is not None:
+            np.save(str(path.joinpath('pooled_feat.npy')), self.pooled_feat.numpy())
             
 
 if __name__ == '__main__':
