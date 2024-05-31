@@ -3,7 +3,7 @@ import os
 import numpy as np
 
 import torch
-from torch import nn
+from torch import nn 
 
 
 class Memory(nn.Module):
@@ -41,6 +41,12 @@ class Memory(nn.Module):
         self.feats        = self._load(Memory.KEYS[1]) if self.use_feats        else None
         self.preact_feats = self._load(Memory.KEYS[2]) if self.use_preact_feats else None
         self.pooled_feat  = self._load(Memory.KEYS[3]) if self.use_pooled_feat  else None
+
+        self.use_adam = cfg.LEMMA.ADAM.ENABLE
+        self.adam_t = torch.zeros_like(self.logits) if self.use_adam else None
+        self.adam_m = torch.zeros_like(self.logits) if self.use_adam else None
+        self.adam_v = torch.zeros_like(self.logits) if self.use_adam else None
+        self.adam_hparams = cfg.LEMMA.ADAM
         
         self.__x_lower = cfg.LEMMA.WARMUP
         self.__ema = cfg.LEMMA.EMA_RANGE
@@ -90,15 +96,26 @@ class Memory(nn.Module):
         pooled_feat = feature['pooled_feat'] if 'pooled_feat' in feature else None
     
         if isinstance(ema_alpha, torch.Tensor):
-            ema_alpha = ema_alpha.cpu()
+            ema_alpha = ema_alpha.cpu().unsqueeze(-1)
+        else:
+            ema_alpha = torch.ones(index.size(0), 1, dtype=torch.float) * ema_alpha
         ema = ema_alpha
         _ema = 1 - ema  # .........| for student
         
         if (logits is not None) and self.use_logits:
-            if isinstance(ema, torch.Tensor):
-                self.logits[index] = (_ema.unsqueeze(-1) * logits.cpu()) + (ema.unsqueeze(-1) * self.logits[index])
-            else:
-                self.logits[index] = (logits.cpu() * _ema) + (self.logits[index] * ema)
+            grad = _ema * (self.logits[index] - logits.cpu())
+            if self.use_adam:
+                betas = self.adam_hparams.BETAS
+                eps = self.adam_hparams.EPS
+                self.adam_t[index] += 1
+                self.adam_m[index] = ((betas[0] * self.adam_m[index].cuda()) + ((1 - betas[0]) * grad.cuda())).cpu()
+                self.adam_v[index] = ((betas[1] * self.adam_v[index].cuda()) + ((1 - betas[1]) * torch.square(grad.cuda()))).cpu()
+                m_hat = self.adam_m[index] / (1 - betas[0]**self.adam_t[index])
+                v_hat = self.adam_v[index] / (1 - betas[1]**self.adam_t[index])
+                grad = m_hat / (torch.sqrt(v_hat) + eps)
+                if torch.any(torch.isnan(grad)):
+                    breakpoint()
+            self.logits[index] -= grad
         if (feats is not None) and self.use_feats:
             for i in range(len(feats)):
                 self.feats[i][index] = (feats[i].cpu() * _ema) + (self.feats[i][index] * ema)
