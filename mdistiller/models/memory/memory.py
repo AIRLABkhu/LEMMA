@@ -41,6 +41,19 @@ class Memory(nn.Module):
         self.feats        = self._load(Memory.KEYS[1]) if self.use_feats        else None
         self.preact_feats = self._load(Memory.KEYS[2]) if self.use_preact_feats else None
         self.pooled_feat  = self._load(Memory.KEYS[3]) if self.use_pooled_feat  else None
+        
+        self.ema_stop = cfg.LEMMA.STOP
+        if self.ema_stop == -1:
+            self.ema_stop = np.inf
+        
+        self.logit_aug_kwargs = cfg.LEMMA.LOGIT_AUG
+        self.use_logit_aug = self.logit_aug_kwargs.ENABLE
+        self.num_classes = {'cifar100': 100, 'imagenet': 1000}[cfg.DATASET.TYPE]
+        self.logit_centroids = None
+        self.num_samples = None
+        self.logit_aug_stop = self.logit_aug_kwargs.STOP
+        if self.logit_aug_stop == -1:
+            self.logit_aug_stop = np.inf
 
         self.use_adam = cfg.LEMMA.ADAM.ENABLE
         self.adam_t = torch.zeros_like(self.logits) if self.use_adam else None
@@ -49,6 +62,7 @@ class Memory(nn.Module):
         self.adam_hparams = cfg.LEMMA.ADAM
         
         self.__x_lower = cfg.LEMMA.WARMUP
+        self.__x_upper = cfg.SOLVER.EPOCHS
         self.__ema = cfg.LEMMA.EMA_RANGE
         self.ema_step = cfg.LEMMA.EMA_STEP
         
@@ -82,8 +96,8 @@ class Memory(nn.Module):
         return logits, features
         
     @torch.no_grad()
-    def update(self, index, epoch, logits, feature, ema_alpha):
-        if epoch < self.__x_lower:
+    def update(self, index, epoch, logits, feature, target, ema_alpha):
+        if (epoch < self.__x_lower) or (self.ema_stop <= epoch):
             return
         if (epoch - self.__x_lower + 1) % self.ema_step != 0:
             return
@@ -104,6 +118,7 @@ class Memory(nn.Module):
         
         if (logits is not None) and self.use_logits:
             grad = _ema * (self.logits[index] - logits.cpu())
+            
             if self.use_adam:
                 betas = self.adam_hparams.BETAS
                 eps = self.adam_hparams.EPS
@@ -113,9 +128,28 @@ class Memory(nn.Module):
                 m_hat = self.adam_m[index] / (1 - betas[0]**self.adam_t[index])
                 v_hat = self.adam_v[index] / (1 - betas[1]**self.adam_t[index])
                 grad = m_hat / (torch.sqrt(v_hat) + eps)
-                if torch.any(torch.isnan(grad)):
-                    breakpoint()
             self.logits[index] -= grad
+                    
+            if self.use_logit_aug and (self.__x_lower < epoch) and (epoch < self.logit_aug_stop):
+                if self.logit_centroids is None:
+                    preds = self.logits.argmax(dim=1)
+                    self.logit_centroids = torch.stack([
+                        self.logits[preds == i].mean(dim=0) for i in range(self.num_classes)
+                    ], dim=0) 
+                    self.num_samples = [
+                        (preds == i).sum().item() for i in range(self.num_classes)
+                    ]
+                    
+                target_uniques = target.unique().tolist()
+                for t in target_uniques:
+                    t_mask = (target == t).cpu()
+                    self.logit_centroids[t] = (self.logit_centroids[t] * self.num_samples[t] + logits[t_mask].sum(dim=0).cpu()) / (self.num_samples[t] + t_mask.sum())
+                    self.num_samples[t] += t_mask.sum().item()
+                    
+                beta = self.adjust_logit_aug_beta(epoch, logits, target, index)
+                centroids = self.logit_centroids[target.cpu()]
+                self.logits[index] = (centroids * beta) + (self.logits[index] * (1-beta))
+                        
         if (feats is not None) and self.use_feats:
             for i in range(len(feats)):
                 self.feats[i][index] = (feats[i].cpu() * _ema) + (self.feats[i][index] * ema)
@@ -124,6 +158,42 @@ class Memory(nn.Module):
                 self.preact_feats[i][index] = (preact_feats[i].cpu() * _ema) + (self.preact_feats[i][index] * ema)
         if (pooled_feat is not None) and self.use_pooled_feat:
             self.pooled_feat[index] = (pooled_feat.cpu() * _ema) + (self.pooled_feat[index] * ema)
+
+    def adjust_logit_aug_beta(self, epoch, logits, target, index):
+        match self.logit_aug_kwargs.STRATEGY:
+            case 'const-rand':
+                beta = self.logit_aug_kwargs.RANGE[0] 
+                beta = torch.rand_like(logits, device='cpu') * beta
+                return beta
+            case 'lin-rand':
+                aug_range = self.logit_aug_kwargs.RANGE
+                beta = (epoch - self.__x_lower) / (self.__x_upper - self.__x_lower)
+                beta = ((1 - beta) * aug_range[0]) + (beta *  aug_range[1])
+                beta = torch.rand_like(logits, device='cpu') * beta
+                return beta
+            case 'attn':
+                device = logits.device
+                batch_size = logits.size(0)
+                num_samples = self.logit_aug_kwargs.ATTN 
+                transmit = self.logit_aug_kwargs.TRANSMIT 
+                
+                steps = torch.linspace(0, 1, num_samples + 2)[None, 1:-1, None].to(device)  # ...........| 1, n[0], 1 
+                centroids = self.logit_centroids[target.cpu()][:, None]  # ..............................| bs, 1, cls 
+                logits = logits[:, None]  # .............................................................| bs, 1, cls 
+                
+                l1_samples = ((centroids.to(device) * steps) + (logits * (1-steps))).flatten(0, 1)  # ...| bs * n[0], cls 
+                l1_targets = target[:, None].repeat(1, num_samples).flatten(0, 1)  # ....................| bs * n[0] 
+                
+                ce = -nn.functional.cross_entropy(l1_samples, l1_targets, reduction='none')  # .....| bs * n[0]
+                ce = ce.reshape(batch_size, num_samples).cpu()
+                weights = ce - ce.min(dim=1, keepdim=True).values
+                weights = weights / weights.max(dim=1, keepdim=True).values  # .................| bs, n[0] -> minmax 
+                
+                if transmit:
+                    t = weights.cumsum(dim=1)
+                    weights = torch.exp(-t) * weights
+                
+                return (weights * torch.arange(num_samples)[None]).mean(dim=1, keepdim=True)  # ......| bs, 1 
 
     @torch.no_grad()
     def export(self, path: str, suffix=None):

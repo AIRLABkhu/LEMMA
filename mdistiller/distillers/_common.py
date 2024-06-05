@@ -27,9 +27,9 @@ def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
             return None, (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case 'attn':
             if cfg.LEMMA.ISOLATE:
-                attn_logit, ema = net(logits_teacher, logits_student.detach(), get_attention=True)
+                attn_logit, ema, _, _ = net(logits_teacher, logits_student.detach(), get_attention=True)
             else:
-                attn_logit, ema = net(logits_teacher, logits_student, get_attention=True)
+                attn_logit, ema, _, _ = net(logits_teacher, logits_student, get_attention=True)
             return attn_logit, ema
         case 'rand':
             batch_size = logits_student.size(0)
@@ -115,7 +115,7 @@ class SimpleAttentionBlock(nn.Module):
         out = self.fc_out(out)
 
         if get_attention:
-            return out, attn_score
+            return out, attn_score, q, k
         else:
             return out
 

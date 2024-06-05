@@ -48,7 +48,7 @@ class KD(Distiller):
                 if epoch in self.reset_epochs:
                     self.teacher.reset()
                 logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher) if self.logit_stand else logits_student
-                self.teacher.update(index, epoch, logits_student_may_shift, {}, ema_alpha=ema_alpha)
+                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha)
 
         # losses
         loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
