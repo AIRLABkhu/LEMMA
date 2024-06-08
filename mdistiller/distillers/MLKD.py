@@ -8,7 +8,7 @@ import numpy as np
 
 from ._base import Distiller
 from .loss import CrossEntropyLabelSmooth
-from ._common import normalize, denormalize
+from ._common import normalize, denormalize, adjust_ema_alpha
 
 def kd_loss(logits_student_in, logits_teacher_in, temperature, reduce=True, logit_stand=False):
     # logits_student = normalize(logits_student_in) if logit_stand else logits_student_in
@@ -86,10 +86,16 @@ def mixup_data_conf(x, y, lam, use_cuda=True):
 class MLKD(Distiller):
     def __init__(self, student, teacher, cfg):
         super(MLKD, self).__init__(student, teacher, cfg)
+        self.cfg = cfg
         self.temperature = cfg.KD.TEMPERATURE
         self.ce_loss_weight = cfg.KD.LOSS.CE_WEIGHT
         self.kd_loss_weight = cfg.KD.LOSS.KD_WEIGHT
         self.logit_stand = cfg.EXPERIMENT.LOGIT_STAND 
+        # LEMMA
+        self.attn_loss_weight = cfg.LEMMA.ATTN.LOSS_WEIGHT
+        self.ema_range = cfg.LEMMA.EMA_RANGE
+        self.ema_from  = cfg.LEMMA.WARMUP
+        self.save_logit = cfg.LEMMA.SAVE_LOGIT
 
     def forward_train(self, image_weak, image_strong, target, index, epoch, **kwargs):
         logits_student_weak, _ = self.student(image_weak)
@@ -97,17 +103,21 @@ class MLKD(Distiller):
         with torch.no_grad():
             logits_teacher_weak, _ = self.teacher(image_weak, index)
             logits_teacher_strong, _ = self.teacher(image_strong, index)
-            
+        
         logits_student_weak_may_stand, _, _ = normalize(logits_student_weak) if self.logit_stand else logits_student_weak
         logits_student_strong_may_stand, _, _ = normalize(logits_student_strong) if self.logit_stand else logits_student_strong
         with torch.no_grad():
             logits_teacher_weak_may_stand, _, _ = normalize(logits_teacher_weak) if self.logit_stand else logits_teacher_weak
             logits_teacher_strong_may_stand, std_teacher, mean_teacher = normalize(logits_teacher_strong) if self.logit_stand else logits_teacher_strong
-            
-        with torch.no_grad():
-            if self.update_teacher:
-                logits_student_strong_may_shift = denormalize(logits_student_strong, std_teacher, mean_teacher) if self.logit_stand else logits_student_strong
-                self.teacher.update(index, epoch, logits_student_strong_may_shift, {})
+   
+        if self.update_teacher:
+            logits_attn, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student_strong_may_stand, logits_teacher_strong_may_stand, self.attn)
+            with torch.no_grad():
+                logits_student_may_shift = denormalize(logits_student_strong_may_stand, std_teacher, mean_teacher) if self.logit_stand else logits_student_strong_may_stand
+                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha)
+        else:
+            logits_attn = None
+
 
         batch_size, class_num = logits_student_strong.shape
 
@@ -272,11 +282,22 @@ class MLKD(Distiller):
         #     logits_teacher_strong,
         #     6.0,
         # ) * mask).mean())
-        losses_dict = {
-            "loss_ce": loss_ce,
-            "loss_kd": loss_kd_weak + loss_kd_strong,
-            "loss_cc": loss_cc_weak,
-            "loss_bc": loss_bc_weak
-        }
+
+        if logits_attn is not None:
+            loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
+            losses_dict = {
+                "loss_ce": loss_ce,
+                "loss_kd": loss_kd_weak + loss_kd_strong,
+                "loss_cc": loss_cc_weak,
+                "loss_bc": loss_bc_weak, 
+                "loss_attn": loss_attn,
+            }
+        else:
+            losses_dict = {
+                "loss_ce": loss_ce,
+                "loss_kd": loss_kd_weak + loss_kd_strong,
+                "loss_cc": loss_cc_weak,
+                "loss_bc": loss_bc_weak, 
+            }
         return logits_student_weak, losses_dict
 
