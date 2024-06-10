@@ -101,22 +101,28 @@ class MLKD(Distiller):
         logits_student_weak, _ = self.student(image_weak)
         logits_student_strong, _ = self.student(image_strong)
         with torch.no_grad():
-            logits_teacher_weak, _ = self.teacher(image_weak, index)
-            logits_teacher_strong, _ = self.teacher(image_strong, index)
+            if self.update_teacher:
+                logits_ , _ = self.teacher(image_weak, index)
+                logits_teacher_weak, logits_teacher_strong = logits_[0], logits_[1]
+            else:
+                logits_teacher_weak, _ = self.teacher(image_weak, index)
+                logits_teacher_strong, _ = self.teacher(image_strong, index)
         
         logits_student_weak_may_stand, _, _ = normalize(logits_student_weak) if self.logit_stand else logits_student_weak
         logits_student_strong_may_stand, _, _ = normalize(logits_student_strong) if self.logit_stand else logits_student_strong
         with torch.no_grad():
-            logits_teacher_weak_may_stand, _, _ = normalize(logits_teacher_weak) if self.logit_stand else logits_teacher_weak
-            logits_teacher_strong_may_stand, std_teacher, mean_teacher = normalize(logits_teacher_strong) if self.logit_stand else logits_teacher_strong
+            logits_teacher_weak_may_stand, std_teacher_weak, mean_teacher_weak = normalize(logits_teacher_weak) if self.logit_stand else logits_teacher_weak
+            logits_teacher_strong_may_stand, std_teacher_strong, mean_teacher_strong = normalize(logits_teacher_strong) if self.logit_stand else logits_teacher_strong
    
         if self.update_teacher:
-            logits_attn, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student_strong_may_stand, logits_teacher_strong_may_stand, self.attn)
+            logits_attn_weak, ema_alpha_weak = adjust_ema_alpha(self.cfg, epoch, logits_student_weak_may_stand, logits_teacher_weak_may_stand, self.attn)
+            logits_attn_strong, ema_alpha_strong = adjust_ema_alpha(self.cfg, epoch, logits_student_strong_may_stand, logits_teacher_strong_may_stand, self.attn)
             with torch.no_grad():
-                logits_student_may_shift = denormalize(logits_student_strong_may_stand, std_teacher, mean_teacher) if self.logit_stand else logits_student_strong_may_stand
-                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha)
+                logits_student_weak_may_shift = denormalize(logits_student_weak_may_stand, std_teacher_weak, mean_teacher_weak) if self.logit_stand else logits_student_weak_may_stand
+                logits_student_strong_may_shift = denormalize(logits_student_strong_may_stand, std_teacher_strong, mean_teacher_strong) if self.logit_stand else logits_student_strong_may_stand
+                self.teacher.update(index, epoch, [logits_student_weak_may_shift, logits_student_strong_may_shift], {}, target, ema_alpha=[ema_alpha_weak, ema_alpha_strong])
         else:
-            logits_attn = None
+            logits_attn_weak, logits_attn_strong = None, None
 
 
         batch_size, class_num = logits_student_strong.shape
@@ -250,7 +256,7 @@ class MLKD(Distiller):
             3.0,
         ) * mask).mean()) + self.kd_loss_weight * ((bc_loss(
             logits_student_weak,
-            logits_teacher_weak,
+            logits_teacher_weak, 
             5.0,
         ) * mask).mean()) + self.kd_loss_weight * ((bc_loss(
             logits_student_weak,
@@ -283,8 +289,8 @@ class MLKD(Distiller):
         #     6.0,
         # ) * mask).mean())
 
-        if logits_attn is not None:
-            loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
+        if logits_attn_weak is not None:
+            loss_attn = self.attn_loss_weight * (F.cross_entropy(logits_attn_weak, target) + F.cross_entropy(logits_attn_strong, target))
             losses_dict = {
                 "loss_ce": loss_ce,
                 "loss_kd": loss_kd_weak + loss_kd_strong,
