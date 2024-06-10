@@ -118,9 +118,17 @@ class MLKD(Distiller):
             logits_attn_weak, ema_alpha_weak = adjust_ema_alpha(self.cfg, epoch, logits_student_weak_may_stand, logits_teacher_weak_may_stand, self.attn)
             logits_attn_strong, ema_alpha_strong = adjust_ema_alpha(self.cfg, epoch, logits_student_strong_may_stand, logits_teacher_strong_may_stand, self.attn)
             with torch.no_grad():
-                logits_student_weak_may_shift = denormalize(logits_student_weak_may_stand, std_teacher_weak, mean_teacher_weak) if self.logit_stand else logits_student_weak_may_stand
-                logits_student_strong_may_shift = denormalize(logits_student_strong_may_stand, std_teacher_strong, mean_teacher_strong) if self.logit_stand else logits_student_strong_may_stand
-                self.teacher.update(index, epoch, [logits_student_weak_may_shift, logits_student_strong_may_shift], {}, target, ema_alpha=[ema_alpha_weak, ema_alpha_strong])
+                if self.logit_stand:
+                    weak_gamma = 2 * ema_alpha_weak * (ema_alpha_weak - 1)  + 1
+                    strong_gamma = 2 * ema_alpha_strong * (ema_alpha_strong - 1)  + 1
+                    logits_student_weak_may_shift = logits_student_weak_may_stand / weak_gamma.unsqueeze(-1)
+                    logits_student_strong_may_shift = logits_student_strong_may_stand / strong_gamma.unsqueeze(-1)
+                    logits_student_weak_may_shift = denormalize(logits_student_weak_may_shift, std_teacher_weak, mean_teacher_weak) 
+                    logits_student_strong_may_shift = denormalize(logits_student_strong_may_shift, std_teacher_strong, mean_teacher_strong) 
+                self.teacher.update(index, epoch, 
+                                    [logits_student_weak_may_shift, logits_student_strong_may_shift], {}, target, 
+                                    ema_alpha=[ema_alpha_weak, ema_alpha_strong], 
+                                    gamma=[weak_gamma, strong_gamma])
         else:
             logits_attn_weak, logits_attn_strong = None, None
 

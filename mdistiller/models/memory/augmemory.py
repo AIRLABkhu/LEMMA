@@ -33,11 +33,12 @@ class AugMemory(nn.Module):
         return [weak_logits, strong_logits], [weak_features, strong_features]
         
     @torch.no_grad()
-    def update(self, index, epoch, logits, feature, target, ema_alpha):
+    def update(self, index, epoch, logits, feature, target, ema_alpha, gamma):
         weak_logits, strong_logits = logits[0], logits[1]
         weak_alpha, strong_alpha = ema_alpha
-        self.weak_memory.update(index, epoch, weak_logits, feature, target, weak_alpha) # 'feature' would be 'None' because memory only be used when memory distillation
-        self.strong_memory.update(index, epoch, strong_logits, feature, target, strong_alpha)
+        weak_gamma, strong_gamma = gamma
+        self.weak_memory.update(index, epoch, weak_logits, feature, target, weak_alpha, weak_gamma) # 'feature' would be 'None' because memory only be used when memory distillation
+        self.strong_memory.update(index, epoch, strong_logits, feature, target, strong_alpha, strong_gamma)
 
     @torch.no_grad()
     def export(self, path: str, suffix=None):
