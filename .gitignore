@@ -24,3 +24,5 @@ temp*
 recipe
 runner
 tools/monitor.*
+*.code_workspace
+launch.json
