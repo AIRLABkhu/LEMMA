@@ -17,7 +17,7 @@ from .mobilenetv2 import mobile_half
 from .ShuffleNetv1 import ShuffleV1
 from .ShuffleNetv2 import ShuffleV2
 
-from ..memory import Memory
+from ..memory import Memory, AugMemory
 
 
 cifar100_model_prefix = os.path.join(
@@ -55,6 +55,14 @@ cifar_model_dict = {
     'ResNet50_mem': (Memory, f'{cifar100_model_prefix}ResNet50_memory'),
     'wrn_40_2_mem': (Memory, f'{cifar100_model_prefix}wrn_40_2_memory'),
     'vgg13_mem': (Memory, f'{cifar100_model_prefix}vgg13_memory'),
+
+    # teacher mlkd memory
+    'resnet56_augmem': (AugMemory, f'{cifar100_model_prefix}resnet56_memory'),
+    'resnet110_augmem': (AugMemory, f'{cifar100_model_prefix}resnet110_memory'),
+    'resnet32x4_augmem': (AugMemory, f'{cifar100_model_prefix}resnet32x4_memory'),
+    'ResNet50_augmem': (AugMemory, f'{cifar100_model_prefix}ResNet50_memory'),
+    'wrn_40_2_augmem': (AugMemory, f'{cifar100_model_prefix}wrn_40_2_memory'),
+    'vgg13_augmem': (AugMemory, f'{cifar100_model_prefix}vgg13_memory'),
     
     # students
     "resnet8": (resnet8, None),

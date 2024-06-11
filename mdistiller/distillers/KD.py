@@ -41,27 +41,37 @@ class KD(Distiller):
             logits_student, _, _ = normalize(logits_student)
             with torch.no_grad():
                 logits_teacher, std_teacher, mean_teacher = normalize(logits_teacher)
-            
+        
         if self.update_teacher:
             logits_attn, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
             with torch.no_grad():
                 if epoch in self.reset_epochs:
                     self.teacher.reset()
-                logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher) if self.logit_stand else logits_student
+                if self.logit_stand:
+                    logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher)
+                else:
+                    logits_student_may_shift = logits_student
                 self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha)
+        else:
+            logits_attn = None
 
         # losses
         loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
-        if logits_attn is not None:
-            loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
-        else:
-            loss_attn = 0
+
         loss_kd = self.kd_loss_weight * kd_loss(
             logits_student, logits_teacher, self.temperature, self.logit_stand
         )
-        losses_dict = {
-            "loss_ce": loss_ce,
-            "loss_kd": loss_kd,
-            "loss_attn": loss_attn,
-        }
+        if logits_attn is not None:
+            loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
+            losses_dict = {
+                "loss_ce": loss_ce,
+                "loss_kd": loss_kd,
+                "loss_attn": loss_attn,
+            }
+        else:
+            losses_dict = {
+                "loss_ce": loss_ce,
+                "loss_kd": loss_kd,
+            }
+        
         return logits_student, losses_dict

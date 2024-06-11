@@ -63,7 +63,10 @@ def main(cfg, resume, opts):
             model_student = imagenet_model_dict[cfg.DISTILLER.STUDENT](pretrained=False)
         else:
             if cfg.LEMMA.ENABLE:
-                memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_mem']
+                if cfg.DISTILLER.TYPE == "MLKD":
+                    memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_augmem']
+                else:
+                    memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_mem']
                 model_teacher = memory_type(memory_dir, cfg)
             else:
                 net, pretrain_model_path = cifar_model_dict[cfg.DISTILLER.TEACHER]

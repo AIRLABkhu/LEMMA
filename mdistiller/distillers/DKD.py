@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from ._base import Distiller
-from ._common import normalize, denormalize
+from ._common import normalize, denormalize, adjust_ema_alpha
 
 def dkd_loss(logits_student_in, logits_teacher_in, target, alpha, beta, temperature, logit_stand):
     # logits_student = normalize(logits_student_in) if logit_stand else logits_student_in
@@ -61,12 +61,18 @@ class DKD(Distiller):
 
     def __init__(self, student, teacher, cfg):
         super(DKD, self).__init__(student, teacher, cfg)
+        self.cfg = cfg
         self.ce_loss_weight = cfg.DKD.CE_WEIGHT
         self.alpha = cfg.DKD.ALPHA
         self.beta = cfg.DKD.BETA
         self.temperature = cfg.DKD.T
         self.warmup = cfg.DKD.WARMUP
         self.logit_stand = cfg.EXPERIMENT.LOGIT_STAND 
+        # LEMMA
+        self.attn_loss_weight = cfg.LEMMA.ATTN.LOSS_WEIGHT
+        self.ema_range = cfg.LEMMA.EMA_RANGE
+        self.ema_from  = cfg.LEMMA.WARMUP
+        self.save_logit = cfg.LEMMA.SAVE_LOGIT
 
     def forward_train(self, image, target, index, epoch, **kwargs):
         logits_student, _ = self.student(image)
@@ -77,15 +83,22 @@ class DKD(Distiller):
             logits_student, _, _ = normalize(logits_student)
             with torch.no_grad():
                 logits_teacher, std_teacher, mean_teacher = normalize(logits_teacher)
-            
-        with torch.no_grad():
-            if self.update_teacher:
-                logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher) if self.logit_stand else logits_student
-                self.teacher.update(index, epoch, logits_student_may_shift, {})
+
+        if self.update_teacher:
+            logits_attn, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
+            with torch.no_grad():
+                if self.logit_stand:
+                    logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher)
+                else:
+                    logits_student_may_shift = logits_student
+                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha)
+        else:
+            logits_attn = None
 
         # losses
         loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
-        loss_dkd = min(kwargs["epoch"] / self.warmup, 1.0) * dkd_loss(
+
+        loss_dkd = min(epoch / self.warmup, 1.0) * dkd_loss(
             logits_student,
             logits_teacher,
             target,
@@ -94,8 +107,16 @@ class DKD(Distiller):
             self.temperature,
             self.logit_stand,
         )
-        losses_dict = {
-            "loss_ce": loss_ce,
-            "loss_kd": loss_dkd,
-        }
+        if logits_attn is not None:
+            loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
+            losses_dict = {
+                "loss_ce": loss_ce,
+                "loss_kd": loss_dkd,
+                "loss_attn" : loss_attn,
+            }
+        else:
+            losses_dict = {
+                "loss_ce": loss_ce,
+                "loss_kd": loss_dkd,
+            }
         return logits_student, losses_dict

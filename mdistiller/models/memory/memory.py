@@ -129,7 +129,7 @@ class Memory(nn.Module):
                 v_hat = self.adam_v[index] / (1 - betas[1]**self.adam_t[index])
                 grad = m_hat / (torch.sqrt(v_hat) + eps)
             self.logits[index] -= grad
-                    
+
             if self.use_logit_aug and (self.__x_lower < epoch) and (epoch < self.logit_aug_stop):
                 if self.logit_centroids is None:
                     preds = self.logits.argmax(dim=1)
@@ -139,7 +139,7 @@ class Memory(nn.Module):
                     self.num_samples = [
                         (preds == i).sum().item() for i in range(self.num_classes)
                     ]
-                    
+
                 target_uniques = target.unique().tolist()
                 for t in target_uniques:
                     t_mask = (target == t).cpu()
@@ -149,6 +149,9 @@ class Memory(nn.Module):
                 beta = self.adjust_logit_aug_beta(epoch, logits, target, index)
                 centroids = self.logit_centroids[target.cpu()]
                 self.logits[index] = (centroids * beta) + (self.logits[index] * (1-beta))
+                
+            if self.logit_aug_kwargs.NOISE:
+                self.logits[index] = self.logits[index] + torch.normal(mean=0, std=self.logit_aug_kwargs.NOISE, size=self.logits[index].shape)
                         
         if (feats is not None) and self.use_feats:
             for i in range(len(feats)):
