@@ -128,10 +128,7 @@ class Memory(nn.Module):
                 m_hat = self.adam_m[index] / (1 - betas[0]**self.adam_t[index])
                 v_hat = self.adam_v[index] / (1 - betas[1]**self.adam_t[index])
                 grad = m_hat / (torch.sqrt(v_hat) + eps)
-            prev_std = self.logits[index].std(dim=-1, keepdim=True)
             self.logits[index] -= grad
-            curr_std = self.logits[index].std(dim=-1, keepdim=True)
-            self.logits[index] = self.logits[index] / curr_std * prev_std
 
             if self.use_logit_aug and (self.__x_lower < epoch) and (epoch < self.logit_aug_stop):
                 if self.logit_centroids is None:
