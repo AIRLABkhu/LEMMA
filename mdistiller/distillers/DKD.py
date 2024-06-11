@@ -87,10 +87,11 @@ class DKD(Distiller):
         if self.update_teacher:
             logits_attn, ema_alpha = adjust_ema_alpha(self.cfg, epoch, logits_student, logits_teacher, self.attn)
             with torch.no_grad():
-                gamma = 2 * ema_alpha * (ema_alpha - 1)  + 1
-                logits_student_may_shift = logits_student / gamma.unsqueeze(-1)
-                logits_student_may_shift = denormalize(logits_student_may_shift, std_teacher, mean_teacher)
-                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha, gamma=gamma)
+                if self.logit_stand:
+                    logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher)
+                else:
+                    logits_student_may_shift = logits_student
+                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha)
         else:
             logits_attn = None
 

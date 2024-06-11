@@ -48,10 +48,10 @@ class KD(Distiller):
                 if epoch in self.reset_epochs:
                     self.teacher.reset()
                 if self.logit_stand:
-                    gamma = 2 * ema_alpha * (ema_alpha - 1)  + 1
-                    logits_student_may_shift = logits_student / gamma.unsqueeze(-1)
-                    logits_student_may_shift = denormalize(logits_student_may_shift, std_teacher, mean_teacher)
-                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha, gamma=gamma)
+                    logits_student_may_shift = denormalize(logits_student, std_teacher, mean_teacher)
+                else:
+                    logits_student_may_shift = logits_student
+                self.teacher.update(index, epoch, logits_student_may_shift, {}, target, ema_alpha=ema_alpha)
         else:
             logits_attn = None
 

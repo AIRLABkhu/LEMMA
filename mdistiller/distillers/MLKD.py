@@ -107,7 +107,7 @@ class MLKD(Distiller):
             else:
                 logits_teacher_weak, _ = self.teacher(image_weak, index)
                 logits_teacher_strong, _ = self.teacher(image_strong, index)
-        
+     
         logits_student_weak_may_stand, _, _ = normalize(logits_student_weak) if self.logit_stand else logits_student_weak
         logits_student_strong_may_stand, _, _ = normalize(logits_student_strong) if self.logit_stand else logits_student_strong
         with torch.no_grad():
@@ -119,16 +119,14 @@ class MLKD(Distiller):
             logits_attn_strong, ema_alpha_strong = adjust_ema_alpha(self.cfg, epoch, logits_student_strong_may_stand, logits_teacher_strong_may_stand, self.attn)
             with torch.no_grad():
                 if self.logit_stand:
-                    weak_gamma = 2 * ema_alpha_weak * (ema_alpha_weak - 1)  + 1
-                    strong_gamma = 2 * ema_alpha_strong * (ema_alpha_strong - 1)  + 1
-                    logits_student_weak_may_shift = logits_student_weak_may_stand / weak_gamma.unsqueeze(-1)
-                    logits_student_strong_may_shift = logits_student_strong_may_stand / strong_gamma.unsqueeze(-1)
-                    logits_student_weak_may_shift = denormalize(logits_student_weak_may_shift, std_teacher_weak, mean_teacher_weak) 
-                    logits_student_strong_may_shift = denormalize(logits_student_strong_may_shift, std_teacher_strong, mean_teacher_strong) 
+                    logits_student_weak_may_shift = denormalize(logits_student_weak_may_stand, std_teacher_weak, mean_teacher_weak) 
+                    logits_student_strong_may_shift = denormalize(logits_student_strong_may_stand, std_teacher_strong, mean_teacher_strong) 
+                else:
+                    logits_student_weak_may_shift = logits_student_weak_may_stand
+                    logits_student_strong_may_shift = logits_student_strong_may_stand
                 self.teacher.update(index, epoch, 
                                     [logits_student_weak_may_shift, logits_student_strong_may_shift], {}, target, 
-                                    ema_alpha=[ema_alpha_weak, ema_alpha_strong], 
-                                    gamma=[weak_gamma, strong_gamma])
+                                    ema_alpha=[ema_alpha_weak, ema_alpha_strong])
         else:
             logits_attn_weak, logits_attn_strong = None, None
 

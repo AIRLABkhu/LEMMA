@@ -96,7 +96,7 @@ class Memory(nn.Module):
         return logits, features
         
     @torch.no_grad()
-    def update(self, index, epoch, logits, feature, target, ema_alpha, gamma):
+    def update(self, index, epoch, logits, feature, target, ema_alpha):
         if (epoch < self.__x_lower) or (self.ema_stop <= epoch):
             return
         if (epoch - self.__x_lower + 1) % self.ema_step != 0:
@@ -117,7 +117,6 @@ class Memory(nn.Module):
         _ema = 1 - ema  # .........| for student
         
         if (logits is not None) and self.use_logits:
-            self.logits[index] = self.logits[index] / gamma.unsqueeze(-1).cpu()
             grad = _ema * (self.logits[index] - logits.cpu())
             
             if self.use_adam:
@@ -129,7 +128,10 @@ class Memory(nn.Module):
                 m_hat = self.adam_m[index] / (1 - betas[0]**self.adam_t[index])
                 v_hat = self.adam_v[index] / (1 - betas[1]**self.adam_t[index])
                 grad = m_hat / (torch.sqrt(v_hat) + eps)
+            prev_std = self.logits[index].std(dim=-1, keepdim=True)
             self.logits[index] -= grad
+            curr_std = self.logits[index].std(dim=-1, keepdim=True)
+            self.logits[index] = self.logits[index] / curr_std * prev_std
 
             if self.use_logit_aug and (self.__x_lower < epoch) and (epoch < self.logit_aug_stop):
                 if self.logit_centroids is None:
