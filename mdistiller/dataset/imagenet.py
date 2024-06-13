@@ -6,7 +6,8 @@ import torchvision.transforms as transforms
 from PIL import ImageOps, ImageEnhance, ImageDraw, Image
 import random
 
-data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../data/imagenet')
+# data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../data/imagenet')
+data_folder = '/material/data/imagenet-original'
 
 
 class ImageNet(ImageFolder):
@@ -304,13 +305,20 @@ def get_imagenet_test_transform(mean, std):
     return test_transform
 
 def get_imagenet_dataloaders(batch_size, val_batch_size, num_workers,
-    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
-    train_transform = get_imagenet_train_transform(mean, std)
+    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225],
+    train_like_test=False):
+    if train_like_test:
+        train_transform = get_imagenet_test_transform(mean, std)
+        shuffle = False
+    else:
+        train_transform = get_imagenet_train_transform(mean, std)
+        shuffle = True
+    
     train_folder = os.path.join(data_folder, 'train')
     train_set = ImageNet(train_folder, transform=train_transform)
     num_data = len(train_set)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, 
-        shuffle=True, num_workers=num_workers, pin_memory=True)
+        shuffle=shuffle, num_workers=num_workers, pin_memory=True)
     test_loader = get_imagenet_val_loader(val_batch_size, mean, std)
     return train_loader, test_loader, num_data
 
