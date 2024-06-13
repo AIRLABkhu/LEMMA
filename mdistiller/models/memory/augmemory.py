@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch import nn 
 
-from mdistiller.models.memory import Memory
+from mdistiller.models.memory import H5Memory
 
 
 class AugMemory(nn.Module):
@@ -15,12 +15,16 @@ class AugMemory(nn.Module):
     
         self.memory_dir = memory_dir
     
-        self.weak_memory = Memory(self.memory_dir, cfg)
-        self.strong_memory = Memory(self.memory_dir, cfg)
+        self.weak_memory = H5Memory(self.memory_dir, cfg)
+        self.strong_memory = H5Memory(self.memory_dir, cfg)
         
     @property
     def device(self):
         return self.weak_memory.device
+    
+    def initdir(self, logdir, *suffix):
+        self.weak_memory.initdir(logdir, 'weak', *suffix)
+        self.strong_memory.initdir(logdir, 'strong', *suffix)
 
     def reset(self):
         self.weak_memory.reset()
@@ -35,14 +39,14 @@ class AugMemory(nn.Module):
     @torch.no_grad()
     def update(self, index, epoch, logits, feature, target, ema_alpha):
         weak_logits, strong_logits = logits[0], logits[1]
-        weak_alpha, strong_alpha = ema_alpha
-        self.weak_memory.update(index, epoch, weak_logits, feature, target, weak_alpha) # 'feature' would be 'None' because memory only be used when memory distillation
+        weak_alpha, strong_alpha = ema_alpha 
+        self.weak_memory.update(index, epoch, weak_logits, feature, target, weak_alpha) # 'feature' could be an empty dict because logit distillation only utilizes 'logits'. 
         self.strong_memory.update(index, epoch, strong_logits, feature, target, strong_alpha)
 
     @torch.no_grad()
     def export(self, path: str, suffix=None):
-        self.weak_memory.export(path=path+'/weak', suffix=suffix)
-        self.strong_memory.export(path=path+'/strong', suffix=suffix)
+        self.weak_memory.export(path=path, suffix=suffix)
+        self.strong_memory.export(path=path, suffix=suffix)
             
 
 if __name__ == '__main__':

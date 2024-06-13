@@ -1,4 +1,6 @@
 import os
+import shutil
+import h5py
 
 import numpy as np
 
@@ -6,41 +8,30 @@ import torch
 from torch import nn 
 
 
-class Memory(nn.Module):
+class H5Memory(nn.Module):
     KEYS = ['logits', 'feats', 'preact_feats', 'pooled_feat']
     
     def __init__(self, memory_dir: str, cfg):
-        super(Memory, self).__init__()
+        super(H5Memory, self).__init__()
         
         mask = {
             "NONE"      : 0b0000, 
             "KD"        : 0b1000, 
             "MLKD"      : 0b1000, 
-            "AT"        : 0b0100, 
-            "OFD"       : 0b0010, 
             "RKD"       : 0b0001, 
-            "FITNET"    : 0b0100, 
-            "KDSVD"     : 0b0100, 
             "CRD"       : 0b0001, 
-            "NST"       : 0b0100, 
             "PKT"       : 0b0001, 
-            "SP"        : 0b0100, 
             "Sonly"     : 0b1000, 
-            "VID"       : 0b0100, 
-            "REVIEWKD"  : 0b0101, 
             "DKD"       : 0b1000, 
         }[cfg.DISTILLER.TYPE]
         
-        self.memory_dir = memory_dir
+        self.origin_filename = os.path.join(memory_dir, 'memory.hdf5')
+        if not os.path.exists(self.origin_filename):
+            raise FileNotFoundError(f"Memory not found: '{self.origin_filename}'.")
+        
+        self.working_filename = None
         self.use_logits       = bool(mask & 0b1000)
-        self.use_feats        = bool(mask & 0b0100)
-        self.use_preact_feats = bool(mask & 0b0010)
         self.use_pooled_feat  = bool(mask & 0b0001)
-
-        self.logits       = self._load(Memory.KEYS[0]) if self.use_logits       else None
-        self.feats        = self._load(Memory.KEYS[1]) if self.use_feats        else None
-        self.preact_feats = self._load(Memory.KEYS[2]) if self.use_preact_feats else None
-        self.pooled_feat  = self._load(Memory.KEYS[3]) if self.use_pooled_feat  else None
         
         self.ema_stop = cfg.LEMMA.STOP
         if self.ema_stop == -1:
@@ -54,46 +45,50 @@ class Memory(nn.Module):
         self.logit_aug_stop = self.logit_aug_kwargs.STOP
         if self.logit_aug_stop == -1:
             self.logit_aug_stop = np.inf
-
-        self.use_adam = cfg.LEMMA.ADAM.ENABLE
-        self.adam_t = torch.zeros_like(self.logits) if self.use_adam else None
-        self.adam_m = torch.zeros_like(self.logits) if self.use_adam else None
-        self.adam_v = torch.zeros_like(self.logits) if self.use_adam else None
-        self.adam_hparams = cfg.LEMMA.ADAM
         
         self.__x_lower = cfg.LEMMA.WARMUP
         self.__x_upper = cfg.SOLVER.EPOCHS
         self.__ema = cfg.LEMMA.EMA_RANGE
         self.ema_step = cfg.LEMMA.EMA_STEP
         
+        self.h5 = None
         self.dummy = nn.Parameter(torch.zeros(0))
+        
+    def __del__(self):
+        self.h5.close()
         
     @property
     def device(self):
         return self.dummy.device
         
-    def _load(self, target):
-        path = os.path.join(self.memory_dir, f'{target}.pth')
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"Memory not found: '{path}'.")
-        
-        return torch.load(path, map_location='cpu')
+    def initdir(self, logdir, *suffix):
+        filename = '_'.join(['memory', *suffix])
+        self.working_filename = os.path.join(logdir, f'{filename}.hdf5')
+        shutil.copyfile(self.origin_filename, self.working_filename)
+        self.h5 = h5py.File(self.working_filename, 'a')
     
     def reset(self):
-        self.logits       = self._load(Memory.KEYS[0]) if self.use_logits       else None
-        self.feats        = self._load(Memory.KEYS[1]) if self.use_feats        else None
-        self.preact_feats = self._load(Memory.KEYS[2]) if self.use_preact_feats else None
-        self.pooled_feat  = self._load(Memory.KEYS[3]) if self.use_pooled_feat  else None
+        with h5py.File(self.origin_filename, 'r') as origin:
+            self.h5['logits'][:] = origin['logits']
+            self.h5['pooled_feat'][:] = origin['pooled_feat']
+            
+    def _sort_index(index):
+        if torch.is_tensor(index):
+            index = index.cpu().numpy()
+        sorted_index = np.sort(index)
+        index_inv = np.argsort(index)
+        index_iinv = np.argsort(index_inv)
+        return sorted_index, index_inv, index_iinv
     
     def forward(self, x, index, **kwargs):
-        index = index.cpu()
-        logits = None if self.logits is None else self.logits[index].to(x.device)
-        features = {
-            'feats': None if self.feats is None else [f[index].to(x.device) for f in self.feats],
-            'preact_feats': None if self.preact_feats is None else [f[index].to(x.device) for f in self.preact_feats],
-            'pooled_feat': None if self.pooled_feat is None else self.pooled_feat[index].to(x.device),
-        }
-        return logits, features
+        index = index.cpu().numpy()
+        sorted_index, _, index_iinv = H5Memory._sort_index(index)
+        return (
+            torch.from_numpy(self.h5['logits'][sorted_index])[index_iinv].to(self.device), 
+            {
+                'pooled_feat': torch.from_numpy(self.h5['pooled_feat'][sorted_index][index_iinv]).to(self.device),
+            }
+        )
         
     @torch.no_grad()
     def update(self, index, epoch, logits, feature, target, ema_alpha):
@@ -105,8 +100,7 @@ class Memory(nn.Module):
             return 
         
         index = index.cpu()
-        feats = feature['feats'] if 'feats' in feature else None
-        preact_feats = feature['preact_feats'] if 'preact_feats' in feature else None
+        sorted_index, index_inv, index_iinv = H5Memory._sort_index(index)
         pooled_feat = feature['pooled_feat'] if 'pooled_feat' in feature else None
     
         if isinstance(ema_alpha, torch.Tensor):
@@ -117,50 +111,41 @@ class Memory(nn.Module):
         _ema = 1 - ema  # .........| for student
         
         if (logits is not None) and self.use_logits:
-            grad = _ema * (self.logits[index] - logits.cpu())
-            
-            if self.use_adam:
-                betas = self.adam_hparams.BETAS
-                eps = self.adam_hparams.EPS
-                self.adam_t[index] += 1
-                self.adam_m[index] = ((betas[0] * self.adam_m[index].cuda()) + ((1 - betas[0]) * grad.cuda())).cpu()
-                self.adam_v[index] = ((betas[1] * self.adam_v[index].cuda()) + ((1 - betas[1]) * torch.square(grad.cuda()))).cpu()
-                m_hat = self.adam_m[index] / (1 - betas[0]**self.adam_t[index])
-                v_hat = self.adam_v[index] / (1 - betas[1]**self.adam_t[index])
-                grad = m_hat / (torch.sqrt(v_hat) + eps)
-            self.logits[index] -= grad
+            mem_logits = torch.from_numpy(self.h5['logits'][sorted_index])[index_iinv]
+            grad = _ema * (mem_logits - logits.cpu())
+            mem_logits -= grad
 
             if self.use_logit_aug and (self.__x_lower < epoch) and (epoch < self.logit_aug_stop):
-                if self.logit_centroids is None:
-                    preds = self.logits.argmax(dim=1)
-                    self.logit_centroids = torch.stack([
-                        self.logits[preds == i].mean(dim=0) for i in range(self.num_classes)
-                    ], dim=0) 
-                    self.num_samples = [
-                        (preds == i).sum().item() for i in range(self.num_classes)
+                if epoch == self.__x_lower + 1: 
+                    preds = np.argmax(self.h5['logits'], axis=1)
+                    self.h5['logits'].attrs['centroids'] = np.stack([
+                        self.h5['logits'][preds == i].mean(axis=0) for i in range(self.num_classes)
+                    ], axis=0) 
+                    self.h5['logits'].attrs['num_samples'] = [
+                        int((preds == i).sum()) for i in range(self.num_classes)
                     ]
+                    self.logit_centroids = self.h5['logits'].attrs['centroids']
+                    self.num_samples = self.h5['logits'].attrs['num_samples']
 
                 target_uniques = target.unique().tolist()
                 for t in target_uniques:
                     t_mask = (target == t).cpu()
-                    self.logit_centroids[t] = (self.logit_centroids[t] * self.num_samples[t] + logits[t_mask].sum(dim=0).cpu()) / (self.num_samples[t] + t_mask.sum())
+                    self.logit_centroids[t] = (self.logit_centroids[t] * self.num_samples[t] + logits[t_mask].sum(dim=0).cpu().numpy()) / (self.num_samples[t] + t_mask.sum().numpy())
                     self.num_samples[t] += t_mask.sum().item()
                     
                 beta = self.adjust_logit_aug_beta(epoch, logits, target, index)
-                centroids = self.logit_centroids[target.cpu()]
-                self.logits[index] = (centroids * beta) + (self.logits[index] * (1-beta))
+                centroids = torch.from_numpy(self.logit_centroids[target.cpu()])
+                mem_logits = (centroids * beta) + (mem_logits * (1-beta))
                 
             if self.logit_aug_kwargs.NOISE:
-                self.logits[index] = self.logits[index] + torch.normal(mean=0, std=self.logit_aug_kwargs.NOISE, size=self.logits[index].shape)
+                mem_logits = mem_logits + torch.normal(mean=0, std=self.logit_aug_kwargs.NOISE, size=mem_logits.shape)
+                
+            self.h5['logits'][sorted_index] = mem_logits[index_inv].numpy()
                         
-        if (feats is not None) and self.use_feats:
-            for i in range(len(feats)):
-                self.feats[i][index] = (feats[i].cpu() * _ema) + (self.feats[i][index] * ema)
-        if (preact_feats is not None) and self.use_preact_feats:
-            for i in range(len(preact_feats)):
-                self.preact_feats[i][index] = (preact_feats[i].cpu() * _ema) + (self.preact_feats[i][index] * ema)
         if (pooled_feat is not None) and self.use_pooled_feat:
-            self.pooled_feat[index] = (pooled_feat.cpu() * _ema) + (self.pooled_feat[index] * ema)
+            mem_pooled_feat = self.h5['pooled_feat'][index]
+            mem_pooled_feat = (pooled_feat.cpu() * _ema) + (mem_pooled_feat * ema)
+            self.pooled_feat[index] = mem_pooled_feat.numpy()
 
     def adjust_logit_aug_beta(self, epoch, logits, target, index, eps=1.0E-8):
         match self.logit_aug_kwargs.STRATEGY:
@@ -201,17 +186,20 @@ class Memory(nn.Module):
 
     @torch.no_grad()
     def export(self, path: str, suffix=None):
-        from pathlib import Path
-        path: Path = Path(path).joinpath(suffix)
-        path.mkdir(parents=True, exist_ok=True)
-        if self.logits is not None:
-            np.save(str(path.joinpath('logits.npy')), self.logits.numpy())
-        if self.feats is not None:
-            torch.save(self.feats, str(path.joinpath('feats.pt')))
-        if self.preact_feats is not None:
-            torch.save(self.preact_feats, str(path.joinpath('preact_feats.pt')))
-        if self.pooled_feat is not None:
-            np.save(str(path.joinpath('pooled_feat.npy')), self.pooled_feat.numpy())
+        if self.h5 is None:
+            return
+        if suffix is not None:
+            path = f'{path}_{suffix}'
+        
+        history = self.h5.require_group('history')
+        history.attrs['use_logits'] = self.use_logits
+        history.attrs['use_pooled_feat'] = self.use_pooled_feat
+        
+        group = history.create_group(path)
+        if self.use_logits:
+            group.create_dataset('logit', data=self.h5['logits'][:])
+        if self.use_pooled_feat:
+            group.create_dataset('pooled_feat', data=self.h5['pooled_feat'][:])
             
 
 if __name__ == '__main__':
@@ -227,7 +215,7 @@ if __name__ == '__main__':
     model_type, state_dict_filename = models.cifar_model_dict[cfg.DISTILLER.TEACHER]
     
     memory_type, memory_dir = models.cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_mem']
-    model: Memory = memory_type(memory_dir, cfg)
+    model: H5Memory = memory_type(memory_dir, cfg)
     
     logits, features = model(None, [2, 4, 6])
     print(logits)

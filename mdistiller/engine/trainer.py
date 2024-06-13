@@ -37,6 +37,9 @@ class BaseTrainer(object):
             log_path.mkdir(parents=True)
         self.tf_writer = SummaryWriter(os.path.join(self.log_path, "train.events"))
         
+        if cfg.LEMMA.ENABLE:
+            self.distiller.module.teacher.initdir(log_path)
+        
         with open(log_path.joinpath('hparams.yaml'), 'wt') as file:
             file.write(cfg.dump())
     
@@ -117,7 +120,7 @@ class BaseTrainer(object):
 
 
         if self.cfg.LEMMA.SAVE_LOGIT and (epoch >= self.cfg.LEMMA.WARMUP) and (((epoch - self.cfg.LEMMA.WARMUP) % self.cfg.LEMMA.SAVE_LOGIT) == 0):
-            self.distiller.module.teacher.export(path=f'__temp/{self.cfg.EXPERIMENT.NAME.replace("/", "-")}', suffix=f'{epoch:03d}')
+            self.distiller.module.teacher.export(path=f'{epoch:03d}')
 
         # validate
         test_acc, test_acc_top5, test_loss = validate(self.val_loader, self.distiller)
