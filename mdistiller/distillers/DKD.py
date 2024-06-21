@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from ._base import Distiller
 from ._common import normalize, denormalize, adjust_ema_alpha
@@ -108,6 +109,11 @@ class DKD(Distiller):
             self.logit_stand,
         )
         if logits_attn is not None:
+            if epoch >= self.cfg.LEMMA.WARMUP:
+                if self.cfg.LEMMA.ATTN.LOSS_DECAY == "exp":
+                    self.attn_loss_weight = min(1, np.exp(- self.cfg.LEMMA.ATTN.LOSS_DECAY_RATIO * (epoch - self.cfg.LEMMA.WARMUP))) * self.attn_loss_weight
+                elif self.cfg.LEMMA.ATTN.LOSS_DECAY == "jump":
+                    self.attn_loss_weight = self.cfg.LEMMA.ATTN.LOSS_WEIGHT_JUMP
             loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
             losses_dict = {
                 "loss_ce": loss_ce,

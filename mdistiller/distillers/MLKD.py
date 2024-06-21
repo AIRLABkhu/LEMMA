@@ -294,8 +294,12 @@ class MLKD(Distiller):
         #     logits_teacher_strong,
         #     6.0,
         # ) * mask).mean())
-
         if logits_attn_weak is not None:
+            if epoch >= self.cfg.LEMMA.WARMUP:
+                if self.cfg.LEMMA.ATTN.LOSS_DECAY == "exp":
+                    self.attn_loss_weight = min(1, np.exp(- self.cfg.LEMMA.ATTN.LOSS_DECAY_RATIO * (epoch - self.cfg.LEMMA.WARMUP))) * self.attn_loss_weight
+                elif self.cfg.LEMMA.ATTN.LOSS_DECAY == "jump":
+                    self.attn_loss_weight = self.cfg.LEMMA.ATTN.LOSS_WEIGHT_JUMP
             loss_attn = self.attn_loss_weight * (F.cross_entropy(logits_attn_weak, target) + F.cross_entropy(logits_attn_strong, target))
             losses_dict = {
                 "loss_ce": loss_ce,
