@@ -27,3 +27,5 @@ temp*
 recipe
 runner
 tools/monitor.*
+*.code-workspace
+.vscode
