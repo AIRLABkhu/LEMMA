@@ -14,6 +14,7 @@ from .Sonly import Sonly
 from .VID import VID
 from .ReviewKD import ReviewKD
 from .DKD import DKD
+from .CondenseKD import CondenseKD
 
 distiller_dict = {
     "NONE": Vanilla,  # ........| None
@@ -32,4 +33,5 @@ distiller_dict = {
     "VID": VID,  # .............| ......... Feats[1:]
     "REVIEWKD": ReviewKD,  # ...| ......... Feats[:] ...................... Pooled-Feats
     "DKD": DKD,  # .............| Logits
+    "CondenseKD": CondenseKD,
 }

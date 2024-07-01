@@ -38,6 +38,19 @@ def adjust_ema_alpha(cfg, epoch, logits_student, logits_teacher, net=None):
             return None, (cfg.LEMMA.EMA_RANGE[0] * sim) + (cfg.LEMMA.EMA_RANGE[1] * _sim)
         case _:
             raise ValueError
+        
+def replicate_logits(logits_student, logits_teacher, card, mag):
+    # logits_student: (B, C), logits_teacher: (B, C) 
+    replica_student = logits_student.unsqueeze(1).repeat(1, card+1, 1)
+    replica_teacher = logits_teacher.unsqueeze(1).repeat(1, card, 1)
+    noise = torch.randn_like(replica_teacher) * mag
+    replica_teacher = replica_teacher + noise
+    replicas_student = replica_student.flatten(0,1)
+    replicas_teacher = torch.concat((logits_teacher.unsqueeze(1), replica_teacher), dim=1).flatten(0,1)
+    return (
+        replicas_student,
+        replicas_teacher,
+    )
 
 
 class ConvReg(nn.Module):

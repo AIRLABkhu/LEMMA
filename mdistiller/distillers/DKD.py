@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 
 from ._base import Distiller
-from ._common import normalize, denormalize, adjust_ema_alpha
+from ._common import normalize, denormalize, adjust_ema_alpha, replicate_logits
 
 def dkd_loss(logits_student_in, logits_teacher_in, target, alpha, beta, temperature, logit_stand):
     # logits_student = normalize(logits_student_in) if logit_stand else logits_student_in
@@ -96,18 +96,40 @@ class DKD(Distiller):
         else:
             logits_attn = None
 
+        # Replicas
+        if self.cfg.LEMMA.REPLICAS.CARDINALITY > 0:
+            cardinality = self.cfg.LEMMA.REPLICAS.CARDINALITY
+            noise = self.cfg.LEMMA.REPLICAS.JITTER
+            replica_logits_student, replica_logits_teacher = replicate_logits(
+                logits_student, logits_teacher, 
+                cardinality, noise
+            )
+            replica_target = target.unsqueeze(1).repeat(1, cardinality+1, 1).flatten(0,1)
+
         # losses
         loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
 
-        loss_dkd = min(epoch / self.warmup, 1.0) * dkd_loss(
-            logits_student,
-            logits_teacher,
-            target,
-            self.alpha,
-            self.beta,
-            self.temperature,
-            self.logit_stand,
-        )
+        if self.cfg.LEMMA.REPLICAS.CARDINALITY > 0:
+            loss_dkd = min(epoch / self.warmup, 1.0) * dkd_loss(
+                replica_logits_student,
+                replica_logits_teacher,
+                replica_target,
+                self.alpha,
+                self.beta,
+                self.temperature,
+                self.logit_stand,
+            )
+        else:
+            loss_dkd = min(epoch / self.warmup, 1.0) * dkd_loss(
+                logits_student,
+                logits_teacher,
+                target,
+                self.alpha,
+                self.beta,
+                self.temperature,
+                self.logit_stand,
+            )
+            
         if logits_attn is not None:
             if epoch >= self.cfg.LEMMA.WARMUP:
                 if self.cfg.LEMMA.ATTN.LOSS_DECAY == "exp":

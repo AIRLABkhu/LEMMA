@@ -8,7 +8,7 @@ import numpy as np
 
 from ._base import Distiller
 from .loss import CrossEntropyLabelSmooth
-from ._common import normalize, denormalize, adjust_ema_alpha
+from ._common import normalize, denormalize, adjust_ema_alpha, replicate_logits
 
 def kd_loss(logits_student_in, logits_teacher_in, temperature, reduce=True, logit_stand=False):
     # logits_student = normalize(logits_student_in) if logit_stand else logits_student_in
@@ -130,6 +130,17 @@ class MLKD(Distiller):
         else:
             logits_attn_weak, logits_attn_strong = None, None
 
+        if self.cfg.LEMMA.REPLICAS.CARDINALITY > 0:
+            cardinality = self.cfg.LEMMA.REPLICAS.CARDINALITY
+            noise = self.cfg.LEMMA.REPLICAS.JITTER
+            logits_student_weak_may_stand, logits_teacher_weak_may_stand = replicate_logits(
+                logits_student_weak_may_stand, logits_teacher_weak_may_stand, 
+                cardinality, noise
+            )
+            logits_student_strong_may_stand, logits_teacher_strong_may_stand = replicate_logits(
+                logits_student_strong_may_stand, logits_teacher_strong_may_stand, 
+                cardinality, noise
+            )
 
         batch_size, class_num = logits_student_strong.shape
 

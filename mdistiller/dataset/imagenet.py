@@ -2,17 +2,46 @@ import os
 import numpy as np
 import torch
 from torchvision.datasets import ImageFolder
+from torchvision.datasets.folder import default_loader
 import torchvision.transforms as transforms
 from PIL import ImageOps, ImageEnhance, ImageDraw, Image
 import random
 
-data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../data/imagenet')
-
+# data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../data/imagenet')
+data_folder = '/material/data/imagenet-original'
 
 class ImageNet(ImageFolder):
+    def __init__(
+        self,
+        root: str,
+        transform = None,
+        target_transform = None,
+        loader = default_loader,
+        is_valid_file = None,
+        ipc: int = 30,
+    ):
+        super(ImageNet, self).__init__(root, transform, target_transform, loader, is_valid_file)
+        self.ipc = ipc
+
+        targets = torch.tensor(self.targets)
+        if self.ipc is not None:
+            self.sampled_indices = []
+            for i in range(1000):
+                i_targets = (targets == i).nonzero().flatten()
+                indices = (torch.randperm(len(i_targets))[:ipc]).sort().values
+                self.sampled_indices.extend(i_targets[indices].tolist())
+                # print(i_targets[indices].tolist())
+        else:
+            self.sampled_indices = list(range(len(self.targets)))
+
+    def __len__(self):
+        return len(self.sampled_indices)
+
     def __getitem__(self, index):
+        index = self.sampled_indices[index]
         img, target = super().__getitem__(index)
         return img, target, index
+    
 
 class ImageNetInstanceSample(ImageNet):
     """: Folder datasets which returns (img, label, index, contrast_index):
@@ -304,13 +333,13 @@ def get_imagenet_test_transform(mean, std):
     return test_transform
 
 def get_imagenet_dataloaders(batch_size, val_batch_size, num_workers,
-    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
+    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], shuffle=True):
     train_transform = get_imagenet_train_transform(mean, std)
     train_folder = os.path.join(data_folder, 'train')
     train_set = ImageNet(train_folder, transform=train_transform)
     num_data = len(train_set)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, 
-        shuffle=True, num_workers=num_workers, pin_memory=True)
+        shuffle=shuffle, num_workers=num_workers, pin_memory=True)
     test_loader = get_imagenet_val_loader(val_batch_size, mean, std)
     return train_loader, test_loader, num_data
 
@@ -343,3 +372,8 @@ def get_imagenet_val_loader(val_batch_size, mean=[0.485, 0.456, 0.406], std=[0.2
     test_loader = torch.utils.data.DataLoader(test_set,
         batch_size=val_batch_size, shuffle=False, num_workers=16, pin_memory=True)
     return test_loader
+
+
+
+if __name__ == '__main__':
+    get_imagenet_dataloaders(32, 32, 10)
