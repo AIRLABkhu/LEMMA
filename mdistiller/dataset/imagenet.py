@@ -2,6 +2,7 @@ import os
 import numpy as np
 import torch
 from torchvision.datasets import ImageFolder
+from torchvision.datasets.folder import default_loader
 import torchvision.transforms as transforms
 from PIL import ImageOps, ImageEnhance, ImageDraw, Image
 import random
@@ -9,11 +10,38 @@ import random
 # data_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../data/imagenet')
 data_folder = '/material/data/imagenet-original'
 
-
 class ImageNet(ImageFolder):
+    def __init__(
+        self,
+        root: str,
+        transform = None,
+        target_transform = None,
+        loader = default_loader,
+        is_valid_file = None,
+        ipc: int = 30,
+    ):
+        super(ImageNet, self).__init__(root, transform, target_transform, loader, is_valid_file)
+        self.ipc = ipc
+
+        targets = torch.tensor(self.targets)
+        if self.ipc is not None:
+            self.sampled_indices = []
+            for i in range(1000):
+                i_targets = (targets == i).nonzero().flatten()
+                indices = (torch.randperm(len(i_targets))[:ipc]).sort().values
+                self.sampled_indices.extend(i_targets[indices].tolist())
+                # print(i_targets[indices].tolist())
+        else:
+            self.sampled_indices = list(range(len(self.targets)))
+
+    def __len__(self):
+        return len(self.sampled_indices)
+
     def __getitem__(self, index):
+        index = self.sampled_indices[index]
         img, target = super().__getitem__(index)
         return img, target, index
+    
 
 class ImageNetInstanceSample(ImageNet):
     """: Folder datasets which returns (img, label, index, contrast_index):
@@ -351,3 +379,8 @@ def get_imagenet_val_loader(val_batch_size, mean=[0.485, 0.456, 0.406], std=[0.2
     test_loader = torch.utils.data.DataLoader(test_set,
         batch_size=val_batch_size, shuffle=False, num_workers=16, pin_memory=True)
     return test_loader
+
+
+
+if __name__ == '__main__':
+    get_imagenet_dataloaders(32, 32, 10)

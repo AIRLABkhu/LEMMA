@@ -24,6 +24,9 @@ cifar100_model_prefix = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), 
     "../../../download_ckpts/cifar_teachers/"
 )
+
+cifar100_dc_prefix = '/home/yy/repos/LEMMA/syn/syn_data/'
+
 cifar_model_dict = {
     # teachers
     "resnet56": (
@@ -55,6 +58,14 @@ cifar_model_dict = {
     'ResNet50_mem': (Memory, f'{cifar100_model_prefix}ResNet50_memory'),
     'wrn_40_2_mem': (Memory, f'{cifar100_model_prefix}wrn_40_2_memory'),
     'vgg13_mem': (Memory, f'{cifar100_model_prefix}vgg13_memory'),
+
+    # data condensation memory
+    'resnet56_dc_mem': (Memory, f'{cifar100_dc_prefix}cifar100_rn56_1K'),
+    'resnet110_dc_mem': (Memory, f'{cifar100_dc_prefix}cifar100_rn110_1K'),
+    'resnet32x4_dc_mem': (Memory, f'{cifar100_dc_prefix}cifar100_rn32x4_1K'),
+    'ResNet50_dc_mem': (Memory, f'{cifar100_dc_prefix}cifar100_RN50_1K'),
+    'wrn_40_2_dc_mem': (Memory, f'{cifar100_dc_prefix}cifar100_wrn40_1K'),
+    'vgg13_dc_mem': (Memory, f'{cifar100_dc_prefix}cifar100_vgg13_1K'),
 
     # teacher mlkd memory
     'resnet56_augmem': (AugMemory, f'{cifar100_model_prefix}resnet56_memory'),

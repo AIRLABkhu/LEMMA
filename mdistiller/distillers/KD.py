@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import numpy as np
+
 from ._base import Distiller
-from ._common import normalize, denormalize, adjust_ema_alpha
+from ._common import normalize, denormalize, adjust_ema_alpha, replicate_logits
 
 def kd_loss(logits_student_in, logits_teacher_in, temperature, logit_stand):
     # logits_student = normalize(logits_student_in) if logit_stand else logits_student_in
@@ -55,6 +57,24 @@ class KD(Distiller):
         else:
             logits_attn = None
 
+        # Replicas
+        if self.cfg.LEMMA.REPLICAS.CARDINALITY > 0:
+            cardinality = self.cfg.LEMMA.REPLICAS.CARDINALITY
+            noise = self.cfg.LEMMA.REPLICAS.JITTER
+            replica_logits_student, replica_logits_teacher = replicate_logits(
+                logits_student, logits_teacher, 
+                cardinality, noise
+            )
+
+        if self.cfg.LEMMA.REPLICAS.CARDINALITY > 0:
+            loss_kd = self.kd_loss_weight * kd_loss(
+                replica_logits_student, replica_logits_teacher, self.temperature, self.logit_stand
+            )
+        else:
+            loss_kd = self.kd_loss_weight * kd_loss(
+                logits_student, logits_teacher, self.temperature, self.logit_stand
+            )
+            
         # losses
         loss_ce = self.ce_loss_weight * F.cross_entropy(logits_student, target)
 
@@ -62,6 +82,11 @@ class KD(Distiller):
             logits_student, logits_teacher, self.temperature, self.logit_stand
         )
         if logits_attn is not None:
+            if epoch >= self.cfg.LEMMA.WARMUP:
+                if self.cfg.LEMMA.ATTN.LOSS_DECAY == "exp":
+                    self.attn_loss_weight = min(1, np.exp(- self.cfg.LEMMA.ATTN.LOSS_DECAY_RATIO * (epoch - self.cfg.LEMMA.WARMUP))) * self.attn_loss_weight
+                elif self.cfg.LEMMA.ATTN.LOSS_DECAY == "jump":
+                    self.attn_loss_weight = self.cfg.LEMMA.ATTN.LOSS_WEIGHT_JUMP
             loss_attn = self.attn_loss_weight * F.cross_entropy(logits_attn, target)
             losses_dict = {
                 "loss_ce": loss_ce,

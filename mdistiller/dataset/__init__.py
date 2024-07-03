@@ -1,4 +1,4 @@
-from .cifar100 import get_cifar100_dataloaders, get_cifar100_dataloaders_sample, get_cifar100_dataloaders_trainval, get_cifar100_dataloaders_val_only, get_cifar100_dataloaders_train_only, get_cifar100_dataloaders_strong
+from .cifar100 import get_cifar100_dataloaders, get_cifar100_dataloaders_sample, get_cifar100_dataloaders_trainval, get_cifar100_dataloaders_val_only, get_cifar100_dataloaders_train_only, get_cifar100_dataloaders_strong, get_condensed_cifar100_dataloaders
 from .imagenet import get_imagenet_dataloaders, get_imagenet_dataloaders_sample, get_imagenet_dataloaders_strong
 
 
@@ -39,6 +39,27 @@ def get_dataset(cfg):
 
     return train_loader, val_loader, num_data, num_classes
 
+# for condensation dataset without trainval split
+def get_dataset_condense(cfg):
+    if cfg.DATASET.TYPE == "cifar100":
+        train_loader, num_data = get_condensed_cifar100_dataloaders(
+            batch_size=cfg.SOLVER.BATCH_SIZE,
+            num_workers=cfg.DATASET.NUM_WORKERS,
+            teacher_model=cfg.DISTILLER.TEACHER,
+            train_like_test=False
+        )
+        num_classes = 100
+    # elif cfg.DATASET.TYPE == "imagenet":
+    #     train_loader, val_loader, num_data = get_imagenet_dataloaders(
+    #         batch_size=cfg.SOLVER.BATCH_SIZE,
+    #         val_batch_size=cfg.DATASET.TEST.BATCH_SIZE,
+    #         num_workers=cfg.DATASET.NUM_WORKERS,
+    #     )
+    #     num_classes = 1000
+    else:
+        raise NotImplementedError(cfg.DATASET.TYPE)
+
+    return train_loader, num_data, num_classes
 
 def get_dataset_strong(cfg):
     if cfg.DATASET.TYPE == "cifar100":

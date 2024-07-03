@@ -1,0 +1,28 @@
+EXPERIMENT:
+  NAME: ""
+  TAG: "kd,lemma,resnet32x4,resnet8x4,2,9"
+  PROJECT: "cifar100_baselines"
+DISTILLER:
+  TYPE: "CondenseKD"
+  TEACHER: "resnet32x4"
+  STUDENT: "resnet8x4"
+LEMMA:
+  ENABLE: True
+  ATTN:
+    LOSS_WEIGHT: 0.1
+KD:
+  LOSS:
+    CE_WEIGHT: 1.0
+    KD_WEIGHT: 0.1
+SOLVER:
+  BATCH_SIZE: 64
+  EPOCHS: 240
+  LR: 0.05
+  LR_DECAY_STAGES: [150, 180, 210]
+  LR_DECAY_RATE: 0.1
+  WEIGHT_DECAY: 0.0005
+  MOMENTUM: 0.9
+  TYPE: "SGD"
+  TRAINER: "condense"
+  
+

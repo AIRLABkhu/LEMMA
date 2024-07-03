@@ -8,7 +8,7 @@ import numpy as np
 
 from ._base import Distiller
 from .loss import CrossEntropyLabelSmooth
-from ._common import normalize, denormalize, adjust_ema_alpha
+from ._common import normalize, denormalize, adjust_ema_alpha, replicate_logits
 
 def kd_loss(logits_student_in, logits_teacher_in, temperature, reduce=True, logit_stand=False):
     # logits_student = normalize(logits_student_in) if logit_stand else logits_student_in
@@ -130,6 +130,17 @@ class MLKD(Distiller):
         else:
             logits_attn_weak, logits_attn_strong = None, None
 
+        if self.cfg.LEMMA.REPLICAS.CARDINALITY > 0:
+            cardinality = self.cfg.LEMMA.REPLICAS.CARDINALITY
+            noise = self.cfg.LEMMA.REPLICAS.JITTER
+            logits_student_weak_may_stand, logits_teacher_weak_may_stand = replicate_logits(
+                logits_student_weak_may_stand, logits_teacher_weak_may_stand, 
+                cardinality, noise
+            )
+            logits_student_strong_may_stand, logits_teacher_strong_may_stand = replicate_logits(
+                logits_student_strong_may_stand, logits_teacher_strong_may_stand, 
+                cardinality, noise
+            )
 
         batch_size, class_num = logits_student_strong.shape
 
@@ -294,8 +305,12 @@ class MLKD(Distiller):
         #     logits_teacher_strong,
         #     6.0,
         # ) * mask).mean())
-
         if logits_attn_weak is not None:
+            if epoch >= self.cfg.LEMMA.WARMUP:
+                if self.cfg.LEMMA.ATTN.LOSS_DECAY == "exp":
+                    self.attn_loss_weight = min(1, np.exp(- self.cfg.LEMMA.ATTN.LOSS_DECAY_RATIO * (epoch - self.cfg.LEMMA.WARMUP))) * self.attn_loss_weight
+                elif self.cfg.LEMMA.ATTN.LOSS_DECAY == "jump":
+                    self.attn_loss_weight = self.cfg.LEMMA.ATTN.LOSS_WEIGHT_JUMP
             loss_attn = self.attn_loss_weight * (F.cross_entropy(logits_attn_weak, target) + F.cross_entropy(logits_attn_strong, target))
             losses_dict = {
                 "loss_ce": loss_ce,

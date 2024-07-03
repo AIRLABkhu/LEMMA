@@ -2,6 +2,7 @@ import os
 import numpy as np
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from torchvision.datasets import ImageFolder
 from torch.utils.data import ConcatDataset
 from PIL import ImageOps, ImageEnhance, ImageDraw, Image
 import random
@@ -13,6 +14,10 @@ def get_data_folder():
         os.makedirs(data_folder)
     return data_folder
 
+class CondenseDataset(ImageFolder):
+    def __getitem__(self, index):
+        img, target = super().__getitem__(index)
+        return img, target, index
 
 class CIFAR100Instance(datasets.CIFAR100):
     """CIFAR100Instance Dataset."""
@@ -352,9 +357,9 @@ def get_cifar100_test_transform():
     )
 
 
-def get_cifar100_dataloaders(batch_size, val_batch_size, num_workers, train_like_test=False):
-    data_folder = get_data_folder()
-    if train_like_test:
+def get_cifar100_dataloaders(batch_size, val_batch_size, num_workers, train_like_test=False,):
+    data_folder = get_data_folder() 
+    if train_like_test :
         train_transform = get_cifar100_test_transform()
     else:
         train_transform = get_cifar100_train_transform()
@@ -379,6 +384,28 @@ def get_cifar100_dataloaders(batch_size, val_batch_size, num_workers, train_like
     )
     return train_loader, test_loader, num_data
 
+def get_condensed_cifar100_dataloaders(batch_size, num_workers, teacher_model, train_like_test=False):
+    model_list = {'resnet32x4': 'rn32x4',
+                  'ResNet50': 'RN50',
+                  'resnet56': 'rn56',
+                  'resnet110': 'rn110',
+                  'vgg13': 'vgg13',
+                  'wrn40': 'wrn40'}
+    condensed_data_folder = f"/home/yy/repos/LEMMA/syn/syn_data/cifar100_{model_list[teacher_model]}_1K"
+    if train_like_test :
+        train_transform = get_cifar100_test_transform()
+    else:
+        train_transform = get_cifar100_train_transform()
+        
+    test_transform = get_cifar100_test_transform()
+    data_set = CondenseDataset(
+        root=condensed_data_folder, transform=train_transform
+    )
+    data_loader = DataLoader(
+        data_set, batch_size=batch_size, shuffle=not train_like_test, num_workers=num_workers
+    )
+    num_data = len(data_set)
+    return data_loader, num_data
 
 def get_cifar100_dataloaders_strong(batch_size, val_batch_size, num_workers):
     data_folder = get_data_folder()

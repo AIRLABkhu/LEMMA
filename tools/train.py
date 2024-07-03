@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.abspath(os.path.dirname(__file__))))
 
 from mdistiller.models import cifar_model_dict, imagenet_model_dict
 from mdistiller.distillers import distiller_dict
-from mdistiller.dataset import get_dataset, get_dataset_strong
+from mdistiller.dataset import get_dataset, get_dataset_strong, get_dataset_condense
 from mdistiller.engine.utils import load_checkpoint, log_msg
 from mdistiller.engine.cfg import CFG as cfg
 from mdistiller.engine.cfg import show_cfg
@@ -43,6 +43,11 @@ def main(cfg, resume, opts):
         train_loader, val_loader, num_data, num_classes = get_dataset_strong(cfg)
     else:
         train_loader, val_loader, num_data, num_classes = get_dataset(cfg)
+        if cfg.DATASET.CONDENSE:
+            condense_loader, num_data, num_classes = get_dataset_condense(cfg)
+            train_loader = (train_loader, condense_loader)
+            
+
     # vanilla
     if cfg.DISTILLER.TYPE == "NONE":
         if cfg.DATASET.TYPE == "imagenet":
@@ -65,6 +70,8 @@ def main(cfg, resume, opts):
             if cfg.LEMMA.ENABLE:
                 if cfg.DISTILLER.TYPE == "MLKD":
                     memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_augmem']
+                elif cfg.DATASET.CONDENSE:
+                    memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_dc_mem']
                 else:
                     memory_type, memory_dir = cifar_model_dict[f'{cfg.DISTILLER.TEACHER}_mem']
                 model_teacher = memory_type(memory_dir, cfg)
